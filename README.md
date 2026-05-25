@@ -38,3 +38,24 @@ If Python is not on your PATH, run it in Google Colab by uploading the notebook 
 - `custodians_hold_doors`
 
 Each scenario reports evacuation time, bottleneck density, trip count, door collision count, and instructor extinguisher retrieval time.
+
+## 2D Agent-Based View
+
+Watch one layout:
+
+```powershell
+python run_2d_simulation.py --layout current
+python run_2d_simulation.py --layout modified
+```
+
+Compare current vs modified layout side by side:
+
+```powershell
+python compare_layouts.py
+```
+
+Save the comparison as a GIF:
+
+```powershell
+python compare_layouts.py --save layout_comparison.gif
+```

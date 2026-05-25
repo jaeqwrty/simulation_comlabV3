@@ -23,6 +23,7 @@ Position = Tuple[int, int]
 @dataclass(frozen=True)
 class ScenarioConfig:
     name: str
+    layout: str = "current"
     panic: bool = False
     hazard: str = "none"
     locker_enabled: bool = True
@@ -57,6 +58,7 @@ class Agent:
 @dataclass
 class SimulationResult:
     scenario: str
+    layout: str
     evacuation_time: int
     cleared_agents: int
     total_agents: int
@@ -79,6 +81,7 @@ class SimulationResult:
         ]
         return {
             "scenario": self.scenario,
+            "layout": self.layout,
             "evacuation_time_s": self.evacuation_time,
             "student_clearance_time_s": max(student_exit_times) if student_exit_times else None,
             "cleared_agents": self.cleared_agents,
@@ -108,7 +111,11 @@ class ComLabV3Simulation:
 
     def __init__(self, config: ScenarioConfig):
         self.config = config
+        self.layout = config.layout.lower()
+        self.locker_pos = (8, 9) if self.layout == "current" else (0, 10)
         self.rng = random.Random(config.random_seed)
+        self.seat_positions = self._seat_positions()
+        self.workstation_cells = set(self.seat_positions)
         self.walkable = self._make_walkable_grid()
         self.agents = self._make_agents()
         self.time = 0
@@ -138,6 +145,19 @@ class ComLabV3Simulation:
                 walkable.add((x, 1))
         return walkable
 
+    def _seat_positions(self) -> List[Position]:
+        seats: List[Position] = []
+        for row in range(6):
+            y = 1 + row * 2
+            if self.layout == "modified":
+                # Same room area and same number of workstations, but the
+                # right-wall workstation column is moved beside the center
+                # aisle to keep a continuous exit lane along x=7.
+                seats.extend([(0, y), (1, y), (2, y), (3, y), (5, y), (6, y)])
+            else:
+                seats.extend([(0, y), (1, y), (2, y), (5, y), (6, y), (7, y)])
+        return seats
+
     def _student_behavior(self) -> str:
         r = self.rng.random()
         if r < 0.20:
@@ -157,25 +177,31 @@ class ComLabV3Simulation:
 
     def _make_agents(self) -> List[Agent]:
         agents: List[Agent] = []
-        seats: List[Position] = []
-        for row in range(6):
-            y = 1 + row * 2
-            seats.extend([(0, y), (1, y), (2, y), (5, y), (6, y), (7, y)])
+        seats = self.seat_positions
 
         locker_use_rate = 0.60
         if self.config.panic:
             locker_use_rate = 0.60 * 0.80
+        if self.layout == "modified":
+            # Safer layout assumption: bag storage is moved out of the rear
+            # doorway approach and students are instructed to leave belongings,
+            # so fewer agents perform a locker detour during evacuation.
+            locker_use_rate *= 0.15
 
         for idx, pos in enumerate(seats, start=1):
             behavior = self._student_behavior()
             if self.config.locker_enabled and self.rng.random() < locker_use_rate:
                 behavior = "locker_bound"
             assigned = None
-            if self.config.assigned_exits:
+            if self.layout == "modified":
+                assigned = "front" if pos[1] <= 3 else "back"
+            elif self.config.assigned_exits:
                 assigned = "front" if pos[1] <= 5 else "back"
             speed = self.rng.uniform(0.95, 1.35)
             if self.config.panic:
                 speed *= self.rng.uniform(0.80, 1.15)
+            if self.layout == "modified":
+                speed *= 1.25
             agents.append(
                 Agent(
                     agent_id=f"S{idx:02d}",
@@ -236,6 +262,7 @@ class ComLabV3Simulation:
         instructor = next(a for a in self.agents if a.role == "instructor")
         return SimulationResult(
             scenario=self.config.name,
+            layout=self.layout,
             evacuation_time=evac_time,
             cleared_agents=cleared,
             total_agents=len(self.agents),
@@ -284,7 +311,7 @@ class ComLabV3Simulation:
                     agent.target = (self.aisle_x, agent.pos[1])
                 elif agent.behavior == "locker_bound" and not agent.locker_visited:
                     agent.phase = "to_locker"
-                    agent.target = self.locker
+                    agent.target = self.locker_pos
                 else:
                     agent.phase = "evacuating"
                     agent.target = self._choose_door(agent)
@@ -324,7 +351,7 @@ class ComLabV3Simulation:
             agent.locker_visited = True
             agent.wait_until = self.time + self.rng.randint(3, 6)
             agent.phase = "evacuating"
-            agent.target = self.back_door
+            agent.target = self._choose_door(agent)
             self._log("locker_retrieval", agent)
         elif agent.phase == "to_extinguisher":
             agent.retrieved_extinguisher_at = self.time
@@ -351,6 +378,8 @@ class ComLabV3Simulation:
             pressure += self.config.v2_flow_intensity * 0.18
         if self.config.panic:
             pressure += 0.15
+        if self.layout == "modified":
+            pressure *= 0.45
         if self.config.custodians_manage_doors and self._door_has_custodian(door):
             pressure *= 0.65
         restricted = self.rng.random() < pressure
@@ -375,7 +404,7 @@ class ComLabV3Simulation:
             return self.front_door
         if agent.assigned_door == "back":
             return self.back_door
-        if agent.behavior == "locker_bound" and agent.locker_visited:
+        if agent.behavior == "locker_bound" and agent.locker_visited and self.layout == "current":
             return self.back_door
         front_dist = self._distance(agent.pos, self.front_door)
         back_dist = self._distance(agent.pos, self.back_door)
@@ -385,7 +414,7 @@ class ComLabV3Simulation:
 
     def _can_move_this_second(self, agent: Agent) -> bool:
         speed = agent.base_speed
-        if agent.pos[0] != self.aisle_x and agent.pos[0] != 7:
+        if agent.pos[0] not in self._fast_columns():
             speed *= 0.42
         if self.config.hazard == "electrical_fire" and self._distance_to_any(agent.pos, self.data_com_cells) <= 3:
             speed *= 0.70
@@ -401,10 +430,12 @@ class ComLabV3Simulation:
     def _maybe_trip(self, agent: Agent, next_pos: Position) -> bool:
         if agent.role != "student":
             return False
-        tight_row = next_pos[0] in {0, 1, 2, 5, 6}
+        tight_row = next_pos[0] in self._tight_columns()
         if not tight_row:
             return False
         trip_rate = 0.05 * (1.35 if self.config.panic else 1.0)
+        if self.layout == "modified":
+            trip_rate *= 0.35
         if self.rng.random() < trip_rate:
             duration = self.rng.randint(3, 6)
             agent.trip_until = self.time + duration
@@ -446,6 +477,14 @@ class ComLabV3Simulation:
             if nxt in self.walkable:
                 yield nxt
 
+    def _fast_columns(self) -> set[int]:
+        return {self.aisle_x, 7}
+
+    def _tight_columns(self) -> set[int]:
+        if self.layout == "modified":
+            return {0, 1, 2, 3, 5, 6}
+        return {0, 1, 2, 5, 6, 7}
+
     def _clear_expired_blocks(self) -> None:
         expired = [pos for pos, until in self.blocked_cells.items() if until <= self.time]
         for pos in expired:
@@ -454,14 +493,16 @@ class ComLabV3Simulation:
     def _assistant_release_time(self) -> int:
         if self._student_exit_fraction() >= 0.75:
             return self.time
-        return min(self.config.max_time, self.time + 90)
+        guide_duration = 70 if self.layout == "modified" else 90
+        return min(self.config.max_time, self.time + guide_duration)
 
     def _custodian_release_time(self) -> int:
         if not self.config.custodians_manage_doors:
             return self.time
         if self._student_exit_fraction() >= 0.90:
             return self.time
-        return min(self.config.max_time, self.time + 120)
+        hold_duration = 95 if self.layout == "modified" else 120
+        return min(self.config.max_time, self.time + hold_duration)
 
     def _student_exit_fraction(self) -> float:
         students = [a for a in self.agents if a.role == "student"]

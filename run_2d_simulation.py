@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+from dataclasses import replace
 from math import cos, pi, sin
 
 import matplotlib.animation as animation
@@ -38,19 +39,23 @@ def draw_room(ax, sim: ComLabV3Simulation) -> None:
     ax.set_yticks(range(sim.height))
     ax.grid(True, color="#d4d4d8", linewidth=0.8)
     ax.set_facecolor("#f8fafc")
-    ax.set_title("ComLab V3 2D Evacuation Simulation")
+    ax.set_title(f"ComLab V3 2D Evacuation Simulation - {sim.layout.title()} Layout")
 
     for y in range(sim.height):
         for x in range(sim.width):
             if (x, y) not in sim.walkable:
                 ax.add_patch(Rectangle((x - 0.5, y - 0.5), 1, 1, color="#1f2937", alpha=0.14))
 
+    for x, y in sim.workstation_cells:
+        ax.add_patch(Rectangle((x - 0.36, y - 0.36), 0.72, 0.72, color="#64748b", alpha=0.22))
+
     for x, y in [(8, 2), (8, 10)]:
         ax.add_patch(Rectangle((x - 0.5, y - 0.5), 1, 1, color="#22c55e", alpha=0.45))
         ax.text(x, y, "EXIT", ha="center", va="center", fontsize=7, weight="bold")
 
-    ax.add_patch(Rectangle((8 - 0.5, 9 - 0.5), 1, 1, color="#facc15", alpha=0.55))
-    ax.text(8, 9, "BAG", ha="center", va="center", fontsize=7, weight="bold")
+    locker_x, locker_y = sim.locker_pos
+    ax.add_patch(Rectangle((locker_x - 0.5, locker_y - 0.5), 1, 1, color="#facc15", alpha=0.55))
+    ax.text(locker_x, locker_y, "BAG", ha="center", va="center", fontsize=7, weight="bold")
 
     for x, y in sim.data_com_cells:
         ax.add_patch(Rectangle((x - 0.5, y - 0.5), 1, 1, color="#fb923c", alpha=0.35))
@@ -64,8 +69,6 @@ def animate_result(sim: ComLabV3Simulation, save_path: str | None = None) -> Non
     result = sim.run()
     agent_ids = [agent.agent_id for agent in sim.agents]
     role_by_id = {agent.agent_id: agent.role for agent in sim.agents}
-    behavior_by_id = {agent.agent_id: agent.behavior for agent in sim.agents}
-
     fig, ax = plt.subplots(figsize=(8, 9))
     draw_room(ax, sim)
 
@@ -183,6 +186,7 @@ def animate_result(sim: ComLabV3Simulation, save_path: str | None = None) -> Non
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--scenario", default="panicked_electrical_fire")
+    parser.add_argument("--layout", choices=["current", "modified"], default="current")
     parser.add_argument("--save", default=None, help="Optional .gif output path")
     args = parser.parse_args()
 
@@ -191,7 +195,7 @@ def main() -> None:
         valid = ", ".join(scenarios)
         raise SystemExit(f"Unknown scenario '{args.scenario}'. Valid options: {valid}")
 
-    sim = ComLabV3Simulation(scenarios[args.scenario])
+    sim = ComLabV3Simulation(replace(scenarios[args.scenario], layout=args.layout))
     animate_result(sim, save_path=args.save)
 
 
