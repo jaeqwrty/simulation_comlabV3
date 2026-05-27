@@ -41,6 +41,13 @@ Each scenario reports evacuation time, bottleneck density, trip count, door coll
 
 ## 2D Agent-Based View
 
+Show only the clear current-vs-safe layout diagram:
+
+```powershell
+python show_layouts.py
+python show_layouts.py --save comlab_layouts.png
+```
+
 Watch one layout:
 
 ```powershell

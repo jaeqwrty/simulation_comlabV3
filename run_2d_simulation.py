@@ -31,7 +31,7 @@ ROLE_COLORS = {
 }
 
 
-def draw_room(ax, sim: ComLabV3Simulation) -> None:
+def draw_room(ax, sim: ComLabV3Simulation, title: str | None = None) -> None:
     ax.set_xlim(-0.5, sim.width - 0.5)
     ax.set_ylim(sim.height - 0.5, -0.5)
     ax.set_aspect("equal")
@@ -39,7 +39,7 @@ def draw_room(ax, sim: ComLabV3Simulation) -> None:
     ax.set_yticks(range(sim.height))
     ax.grid(True, color="#d4d4d8", linewidth=0.8)
     ax.set_facecolor("#f8fafc")
-    ax.set_title(f"ComLab V3 2D Evacuation Simulation - {sim.layout.title()} Layout")
+    ax.set_title(title or f"ComLab V3 2D Evacuation Simulation - {sim.layout.title()} Layout")
 
     for y in range(sim.height):
         for x in range(sim.width):
@@ -65,7 +65,7 @@ def draw_room(ax, sim: ComLabV3Simulation) -> None:
     ax.text(7, 1, "EXT", ha="center", va="center", fontsize=7, weight="bold")
 
 
-def animate_result(sim: ComLabV3Simulation, save_path: str | None = None) -> None:
+def animate_result(sim: ComLabV3Simulation, save_path: str | None = None, show_labels: bool = False) -> None:
     result = sim.run()
     agent_ids = [agent.agent_id for agent in sim.agents]
     role_by_id = {agent.agent_id: agent.role for agent in sim.agents}
@@ -103,6 +103,7 @@ def animate_result(sim: ComLabV3Simulation, save_path: str | None = None) -> Non
             weight="bold",
             zorder=5,
         )
+        label.set_visible(show_labels)
         agent_artists[agent_id] = (point, label)
 
     time_label = ax.text(0, -0.9, "", fontsize=11, weight="bold")
@@ -187,6 +188,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--scenario", default="panicked_electrical_fire")
     parser.add_argument("--layout", choices=["current", "modified"], default="current")
+    parser.add_argument("--labels", action="store_true", help="Show agent IDs on each moving point")
     parser.add_argument("--save", default=None, help="Optional .gif output path")
     args = parser.parse_args()
 
@@ -196,7 +198,7 @@ def main() -> None:
         raise SystemExit(f"Unknown scenario '{args.scenario}'. Valid options: {valid}")
 
     sim = ComLabV3Simulation(replace(scenarios[args.scenario], layout=args.layout))
-    animate_result(sim, save_path=args.save)
+    animate_result(sim, save_path=args.save, show_labels=args.labels)
 
 
 if __name__ == "__main__":

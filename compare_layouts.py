@@ -78,7 +78,7 @@ def print_comparison_table(scenario_name: str, seed: int, replications: int) -> 
     print("-" * 78)
 
 
-def make_agent_artists(ax, sim: ComLabV3Simulation):
+def make_agent_artists(ax, sim: ComLabV3Simulation, show_labels: bool):
     artists = {}
     for agent in sim.agents:
         marker = "o"
@@ -109,11 +109,12 @@ def make_agent_artists(ax, sim: ComLabV3Simulation):
             weight="bold",
             zorder=5,
         )
+        label.set_visible(show_labels)
         artists[agent.agent_id] = (point, label)
     return artists
 
 
-def animate_comparison(scenario_name: str, seed: int, save_path: str | None) -> None:
+def animate_comparison(scenario_name: str, seed: int, save_path: str | None, show_labels: bool) -> None:
     base = next(config for config in default_scenarios(seed=seed) if config.name == scenario_name)
     current_sim = ComLabV3Simulation(replace(base, layout="current"))
     modified_sim = ComLabV3Simulation(
@@ -123,13 +124,11 @@ def animate_comparison(scenario_name: str, seed: int, save_path: str | None) -> 
     modified_result = modified_sim.run()
 
     fig, axes = plt.subplots(1, 2, figsize=(15, 8))
-    draw_room(axes[0], current_sim)
-    draw_room(axes[1], modified_sim)
-    axes[0].set_title("Current Layout")
-    axes[1].set_title("Modified Safer Layout")
+    draw_room(axes[0], current_sim, title="Current Layout: Original Workstation Placement")
+    draw_room(axes[1], modified_sim, title="New Safer Layout: Clear Exit Lane + Relocated Bags")
 
-    current_artists = make_agent_artists(axes[0], current_sim)
-    modified_artists = make_agent_artists(axes[1], modified_sim)
+    current_artists = make_agent_artists(axes[0], current_sim, show_labels)
+    modified_artists = make_agent_artists(axes[1], modified_sim, show_labels)
     current_label = axes[0].text(0, -0.9, "", fontsize=10, weight="bold")
     modified_label = axes[1].text(0, -0.9, "", fontsize=10, weight="bold")
 
@@ -179,6 +178,7 @@ def main() -> None:
     parser.add_argument("--scenario", default="panicked_electrical_fire")
     parser.add_argument("--seed", type=int, default=12)
     parser.add_argument("--replications", type=int, default=30)
+    parser.add_argument("--labels", action="store_true", help="Show agent IDs on the animation")
     parser.add_argument("--save", default=None, help="Optional .gif output path")
     args = parser.parse_args()
 
@@ -187,7 +187,7 @@ def main() -> None:
         raise SystemExit(f"Unknown scenario '{args.scenario}'. Valid options: {', '.join(sorted(valid))}")
 
     print_comparison_table(args.scenario, args.seed, args.replications)
-    animate_comparison(args.scenario, args.seed, args.save)
+    animate_comparison(args.scenario, args.seed, args.save, args.labels)
 
 
 if __name__ == "__main__":
