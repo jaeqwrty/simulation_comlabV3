@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ComLab V3 Python ABM</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">UMTC Visayan Campus / ComLab V3</p>
+        <h1>Emergency Egress Agent Simulation</h1>
+      </div>
+      <div class="status-pill">
+        <span id="statusDot" class="status-dot"></span>
+        <span id="statusText">Ready</span>
+      </div>
+    </header>
+
+    <section class="controls">
+      <button id="startBtn" class="primary">Start</button>
+      <button id="stepBtn">Step</button>
+      <button id="resetBtn">Reset</button>
+
+      <label>
+        <span>Mode</span>
+        <select id="modeSelect">
+          <option value="current">Current Layout</option>
+          <option value="modified">Modified Layout</option>
+        </select>
+      </label>
+
+      <button id="panicBtn" class="toggle active">Panic</button>
+      <button id="heatBtn" class="toggle active">Heatmap</button>
+
+      <label>
+        <span>Fire</span>
+        <select id="fireSelect">
+          <option value="data">Data Com Rack</option>
+          <option value="desk">Instructor Desk</option>
+        </select>
+      </label>
+
+      <label class="speed-control">
+        <span>Speed <b id="speedText">1.5x</b></span>
+        <input id="speedRange" type="range" min="0.5" max="3" step="0.1" value="1.5">
+      </label>
+
+      <button id="compareBtn">Run Comparison</button>
+    </section>
+
+    <section class="workspace">
+      <section class="map-panel">
+        <div class="panel-head">
+          <div>
+            <h2 id="layoutTitle">Current Layout</h2>
+            <p id="layoutNote">Locker near Back-Right exit creates cross-traffic.</p>
+          </div>
+          <span class="mini-badge">Python logic</span>
+        </div>
+        <div class="map-wrap">
+          <canvas id="mapCanvas" width="442" height="408"></canvas>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="card metrics-card">
+          <h2>Live Tracking</h2>
+          <div class="metrics">
+            <div><strong id="mTime">0s</strong><span>Total time</span></div>
+            <div><strong id="mInside">41</strong><span>Inside</span></div>
+            <div><strong id="mEvacuated">0</strong><span>Evacuated</span></div>
+            <div><strong id="mTrips">0</strong><span>Trips</span></div>
+            <div><strong id="mDoors">0</strong><span>Door hits</span></div>
+            <div><strong id="mHeat">0</strong><span>Max heat</span></div>
+          </div>
+        </section>
+
+        <section class="card chart-card">
+          <h2>Evacuation Rate</h2>
+          <canvas id="chart" width="340" height="128"></canvas>
+        </section>
+
+        <section class="card">
+          <h2>Legend</h2>
+          <div id="legend" class="legend"></div>
+        </section>
+
+        <section class="card">
+          <h2>Event Log</h2>
+          <div id="events" class="events">No incidents yet.</div>
+        </section>
+      </aside>
+    </section>
+
+    <section id="comparison" class="comparison">
+      <strong>Side-by-side results will appear here after running comparison.</strong>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

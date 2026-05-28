@@ -1,68 +1,67 @@
 # ComLab V3 Emergency Egress Simulation
 
-Agent-based micro-simulation for the revised ComLab V3 evacuation proposal.
+Python-powered agent-based micro-simulation for comparing the current ComLab V3 layout against a safer modified layout.
 
-The model represents:
+The browser is only the visual interface. The simulation logic, agents, pathfinding, incidents, metrics, and comparison run in Python.
 
-- 36 students in a 6-row workstation layout
-- 1 instructor
-- 2 presiding assistants
-- 2 lab custodians
-- locker detours near the back-right exit
-- task and peer delays
-- smoke slowdown from Data Communications racks
-- trip/fall blockages in tight rows
-- outward-swinging door conflicts
-- hallway backpressure from nearby laboratories and two staircase directions
+## Project Structure
 
-## Files
-
-- `comlab_v3_sim.py` - reusable simulation engine
-- `ComLab_V3_Evacuation_Simulation.ipynb` - Google Colab-ready notebook
-- `requirements.txt` - Python package list for local/Colab use
-
-## Run Locally
-
-```powershell
-python comlab_v3_sim.py
+```text
+ModelandSimulation/
+  run.py                    # main launcher
+  comlab_v3/
+    engine.py               # simulation rules and agent logic
+    web.py                  # local Python server and API
+    static/
+      index.html            # app layout
+      app.css               # visual design
+      app.js                # canvas drawing and controls
 ```
 
-If Python is not on your PATH, run it in Google Colab by uploading the notebook and module.
+## Run In VS Code
 
-## Main Scenarios
-
-- `orderly_fire_drill`
-- `panicked_electrical_fire`
-- `no_locker_detour`
-- `assigned_exits`
-- `custodians_hold_doors`
-
-Each scenario reports evacuation time, bottleneck density, trip count, door collision count, and instructor extinguisher retrieval time.
-
-## 2D Agent-Based View
-
-Show only the clear current-vs-safe layout diagram:
+Open a terminal in this folder:
 
 ```powershell
-python show_layouts.py
-python show_layouts.py --save comlab_layouts.png
+C:\Users\johnm\Documents\ModelandSimulation
 ```
 
-Watch one layout:
+Run the app with your virtual environment Python:
 
 ```powershell
-python run_2d_simulation.py --layout current
-python run_2d_simulation.py --layout modified
+.\.venv\Scripts\python.exe run.py
 ```
 
-Compare current vs modified layout side by side:
+Then open:
+
+```text
+http://127.0.0.1:8000
+```
+
+To start the server without automatically opening a browser tab:
 
 ```powershell
-python compare_layouts.py
+.\.venv\Scripts\python.exe run.py --no-browser
 ```
 
-Save the comparison as a GIF:
+If Python is already added to PATH, this also works:
 
 ```powershell
-python compare_layouts.py --save layout_comparison.gif
+python run.py
 ```
+
+## What The App Simulates
+
+- 36 student agents with immediate, locker-bound, task-bound, and peer-bound behaviors
+- 1 instructor, 2 presiding assistants, and 2 custodians
+- Current layout with lockers near the Back-Right exit
+- Modified layout with lockers moved away from the exit path
+- Door collisions, trips/falls, smoke slowdown, crowd density, and congestion heat
+- Total evacuation time, agents still inside, evacuation rate chart, and side-by-side results
+
+## Where To Modify Things
+
+- Change evacuation rules, agents, obstacles, speeds, and layout constants in `comlab_v3/engine.py`.
+- Change API behavior or server port in `comlab_v3/web.py`.
+- Change the visual design in `comlab_v3/static/app.css`.
+- Change drawing or UI interactions in `comlab_v3/static/app.js`.
