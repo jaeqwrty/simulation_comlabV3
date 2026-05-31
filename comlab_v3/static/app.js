@@ -22,6 +22,7 @@ let heatVisible = true;
 let panic = true;
 let running = false;
 let animationFrameId = null;
+let lastPostTime = 0; // Prevent polling from overwriting user interactions
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -79,6 +80,7 @@ function config() {
 }
 
 async function post(path, body = {}) {
+  lastPostTime = Date.now(); // Record user action timestamp
   const res = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -90,8 +92,11 @@ async function post(path, body = {}) {
 }
 
 async function poll() {
+  // If user interacted recently, ignore polling state responses to protect local state changes
+  if (Date.now() - lastPostTime < 800) return;
   const res = await fetch("/api/state");
   state = await res.json();
+  if (Date.now() - lastPostTime < 800) return;
   syncFromState();
   triggerDraw();
 }

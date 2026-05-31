@@ -168,6 +168,10 @@ select {
   outline: none;
 }
 
+button * {
+  pointer-events: none;
+}
+
 button svg {
   width: 14px;
   height: 14px;
