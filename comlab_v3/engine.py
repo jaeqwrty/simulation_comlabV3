@@ -26,6 +26,7 @@ MODIFIED_LOCKER = (0, 0)
 DATA_RACKS = {(8, 4), (8, 5), (8, 6)}
 INSTRUCTOR_DESK = {(1, 0), (2, 0), (3, 0)}
 WORKSTATIONS = [(x, 1 + row * 2) for row in range(6) for x in (0, 1, 2, 5, 6, 7)]
+WORKSTATIONS_SET = set(WORKSTATIONS)
 
 
 @dataclass
@@ -82,28 +83,25 @@ def fire_origin_for(origin: str) -> tuple[int, int]:
     return (2, 0) if origin == "desk" else (8, 5)
 
 
-def is_obstacle(pos: tuple[int, int], mode: str, fire_origin: tuple[int, int]) -> bool:
-    if not is_lab_cell(pos) and not is_hallway_cell(pos):
+def is_obstacle(pos: tuple[int, int], blocked_cells: set[tuple[int, int]]) -> bool:
+    x, y = pos
+    if not (0 <= x < COLS and 0 <= y < ROWS):
         return True
-    if is_hallway_cell(pos) or is_exit_cell(pos):
+    if x >= LAB_COLS or pos in {FRONT_EXIT, BACK_EXIT}:
         return False
-
-    blocked = set(INSTRUCTOR_DESK) | set(DATA_RACKS) | {locker_for(mode)}
-    is_seat = pos in WORKSTATIONS
-    return ((pos in blocked) and not is_seat) or pos == fire_origin
+    return (pos in blocked_cells) and (pos not in WORKSTATIONS_SET)
 
 
-def neighbors(pos: tuple[int, int], mode: str, fire_origin: tuple[int, int]) -> list[tuple[int, int]]:
+def neighbors(pos: tuple[int, int], blocked_cells: set[tuple[int, int]]) -> list[tuple[int, int]]:
     x, y = pos
     candidates = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-    return [item for item in candidates if not is_obstacle(item, mode, fire_origin)]
+    return [item for item in candidates if not is_obstacle(item, blocked_cells)]
 
 
 def find_path(
     start: tuple[int, int],
     target: tuple[int, int],
-    mode: str,
-    fire_origin: tuple[int, int],
+    blocked_cells: set[tuple[int, int]],
 ) -> list[tuple[int, int]]:
     queue = deque([start])
     came_from: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
@@ -112,7 +110,7 @@ def find_path(
         current = queue.popleft()
         if current == target:
             break
-        options = sorted(neighbors(current, mode, fire_origin), key=lambda pos: manhattan(pos, target))
+        options = sorted(neighbors(current, blocked_cells), key=lambda pos: manhattan(pos, target))
         for next_pos in options:
             if next_pos not in came_from:
                 came_from[next_pos] = current
@@ -138,6 +136,10 @@ class Simulation:
         self.panic = panic
         self.fire_origin_name = fire_origin
         self.fire_origin = fire_origin_for(fire_origin)
+        
+        # Precompute static blocked cells set for speed
+        self.blocked_cells = set(INSTRUCTOR_DESK) | set(DATA_RACKS) | {locker_for(mode)} | {self.fire_origin}
+        
         self.time = 0
         self.trips = 0
         self.door_collisions = 0
@@ -146,7 +148,7 @@ class Simulation:
         self.rate = [(0, 0)]
         self.events: list[tuple[int, str, str]] = []
         self.completed = False
-        self.path_cache: dict[tuple[tuple[int, int], tuple[int, int], str, tuple[int, int]], list[tuple[int, int]]] = {}
+        self.path_cache: dict[tuple[tuple[int, int], tuple[int, int]], list[tuple[int, int]]] = {}
         self.agents = self.make_agents()
 
     def make_agents(self) -> list[Agent]:
@@ -197,14 +199,15 @@ class Simulation:
         self.events.insert(0, (self.time, event_type, message))
         self.events = self.events[:40]
 
-    def density_map(self) -> dict[str, int]:
-        density: dict[str, int] = {}
+    def density_map(self) -> dict[tuple[int, int], int]:
+        density: dict[tuple[int, int], int] = {}
         for agent in self.agents:
             if not agent.exited:
-                density[cell_key((agent.x, agent.y))] = density.get(cell_key((agent.x, agent.y)), 0) + 1
+                pos = (agent.x, agent.y)
+                density[pos] = density.get(pos, 0) + 1
         return density
 
-    def choose_exit(self, agent: Agent, density: dict[str, int]) -> tuple[int, int]:
+    def choose_exit(self, agent: Agent, density: dict[tuple[int, int], int]) -> tuple[int, int]:
         if agent.assigned_exit == "front":
             return FRONT_EXIT
         if agent.assigned_exit == "back":
@@ -212,10 +215,10 @@ class Simulation:
         if agent.behavior == "locker" and agent.visited_locker:
             return BACK_EXIT
         if self.panic and seeded_random(agent.seed + len(density)) < 0.18:
-            return FRONT_EXIT if density.get(cell_key(FRONT_EXIT), 0) <= density.get(cell_key(BACK_EXIT), 0) else BACK_EXIT
+            return FRONT_EXIT if density.get(FRONT_EXIT, 0) <= density.get(BACK_EXIT, 0) else BACK_EXIT
         return FRONT_EXIT if manhattan((agent.x, agent.y), FRONT_EXIT) <= manhattan((agent.x, agent.y), BACK_EXIT) else BACK_EXIT
 
-    def target_for(self, agent: Agent, density: dict[str, int]) -> tuple[int, int]:
+    def target_for(self, agent: Agent, density: dict[tuple[int, int], int]) -> tuple[int, int]:
         if agent.kind == "student":
             if self.time < agent.wait_until:
                 return agent.target
@@ -232,9 +235,9 @@ class Simulation:
             return FRONT_EXIT if agent.assigned_exit == "front" else BACK_EXIT
         return agent.target
 
-    def speed_for(self, agent: Agent, density: dict[str, int]) -> float:
+    def speed_for(self, agent: Agent, density: dict[tuple[int, int], int]) -> float:
         speed = 1.0 if agent.kind == "student" else 1.08
-        crowded = density.get(cell_key((agent.x, agent.y)), 1)
+        crowded = density.get((agent.x, agent.y), 1)
         if is_lab_cell((agent.x, agent.y)) and agent.x not in {4, 7}:
             speed *= 0.58
         if manhattan((agent.x, agent.y), self.fire_origin) <= 3:
@@ -253,14 +256,19 @@ class Simulation:
 
         self.time += 1
         density = self.density_map()
-        for density_key, count in density.items():
+        for pos, count in density.items():
+            density_key = f"{pos[0]},{pos[1]}"
             self.heatmap[density_key] = self.heatmap.get(density_key, 0) + count
 
         for agent in self.agents:
             if agent.exited:
                 continue
 
-            agent.target = self.target_for(agent, density)
+            new_target = self.target_for(agent, density)
+            if new_target != agent.target:
+                agent.target = new_target
+                agent.path = []  # Target changed, clear cached path to recalculate
+
             if self.time < agent.wait_until or self.time < agent.trip_until:
                 continue
 
@@ -269,11 +277,14 @@ class Simulation:
                 self.handle_arrival(agent)
                 continue
 
-            cache_key = (current, agent.target, self.mode, self.fire_origin)
-            if cache_key not in self.path_cache:
-                self.path_cache[cache_key] = find_path(current, agent.target, self.mode, self.fire_origin)
-            path = self.path_cache[cache_key]
-            if not path:
+            # Compute/Retrieve static path if empty
+            if not agent.path:
+                cache_key = (current, agent.target)
+                if cache_key not in self.path_cache:
+                    self.path_cache[cache_key] = find_path(current, agent.target, self.blocked_cells)
+                agent.path = list(self.path_cache[cache_key])
+
+            if not agent.path:
                 continue
 
             agent.speed_bank += self.speed_for(agent, density)
@@ -283,8 +294,8 @@ class Simulation:
                 continue
             agent.speed_bank -= 1
 
-            next_cell = path[0]
-            local_density = density.get(cell_key(next_cell), 0)
+            next_cell = agent.path[0]
+            local_density = density.get(next_cell, 0)
             trip_chance = (0.045 if local_density >= 3 else 0.012) * (1.6 if self.panic else 1.0) * (0.45 if self.mode == "modified" else 1.0)
             if agent.kind == "student" and seeded_random(self.time * agent.seed + self.trips) < trip_chance:
                 self.trips += 1
@@ -294,6 +305,7 @@ class Simulation:
                 continue
 
             agent.x, agent.y = next_cell
+            agent.path.pop(0)  # Move successful, consume node
             self.handle_arrival(agent)
 
         evacuated = sum(1 for agent in self.agents if agent.exited)
