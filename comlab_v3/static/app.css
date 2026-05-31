@@ -33,8 +33,13 @@
   user-select: none;
 }
 
+html {
+  overflow-y: auto;
+  height: 100%;
+}
+
 body {
-  min-height: 100vh;
+  min-height: 100%;
   color: var(--text);
   background-color: var(--bg);
   background-image: 
@@ -45,7 +50,7 @@ body {
   background-size: auto, auto, 28px 28px, 28px 28px;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  overflow-y: scroll;
+  overflow-y: auto;
 }
 
 /* Compact Scrollbar Styling */
@@ -67,7 +72,7 @@ body {
 .shell {
   width: min(1280px, calc(100vw - 24px));
   margin: 0 auto;
-  padding: 12px 0 24px;
+  padding: 12px 0 100px;
   display: flex;
   flex-direction: column;
   gap: 12px;
