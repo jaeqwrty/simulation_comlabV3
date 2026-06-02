@@ -137,8 +137,9 @@ class Simulation:
         self.fire_origin_name = fire_origin
         self.fire_origin = fire_origin_for(fire_origin)
         
-        # Precompute static blocked cells set for speed
-        self.blocked_cells = set(INSTRUCTOR_DESK) | set(DATA_RACKS) | {locker_for(mode)} | {self.fire_origin}
+        # Precompute static blocked cells set for speed. Lockers are destination
+        # cells, so they need to remain pathable for locker-bound agents.
+        self.blocked_cells = set(INSTRUCTOR_DESK) | set(DATA_RACKS) | {self.fire_origin}
         
         self.time = 0
         self.trips = 0
@@ -229,7 +230,7 @@ class Simulation:
             return self.choose_exit(agent, density)
         if agent.kind == "instructor":
             if agent.phase == "to_extinguisher":
-                return (3, 0) if self.fire_origin_name == "desk" else (7, 1)
+                return (4, 0) if self.fire_origin_name == "desk" else (7, 1)
             return self.choose_exit(agent, density)
         if agent.kind in {"assistant", "custodian"} and self.time >= agent.wait_until:
             return FRONT_EXIT if agent.assigned_exit == "front" else BACK_EXIT

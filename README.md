@@ -65,3 +65,17 @@ python run.py
 - Change API behavior or server port in `comlab_v3/web.py`.
 - Change the visual design in `comlab_v3/static/app.css`.
 - Change drawing or UI interactions in `comlab_v3/static/app.js`.
+
+## Validate And Benchmark
+
+Run the validation tests:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Run the scenario validation and benchmark matrix:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\validate_benchmark.py --iterations 100
+```
