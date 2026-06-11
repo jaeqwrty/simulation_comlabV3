@@ -175,34 +175,58 @@ function drawWorkstationBlueprint(ctx, x, y) {
 }
 
 function drawInstructorDeskBlueprint(ctx, x, y, index) {
+  // In the real room, the front wall has a whiteboard, not a big desk.
+  // The instructor desk cells just represent the narrow area in front
+  // of the whiteboard — render as a subtle floor marker, not a desk block.
   const px = x * CELL;
   const py = y * CELL;
   
-  ctx.fillStyle = "rgba(51, 65, 85, 0.55)";
-  ctx.strokeStyle = "rgba(100, 116, 139, 0.6)";
-  ctx.lineWidth = 1;
+  ctx.fillStyle = "rgba(30, 41, 59, 0.15)";
+  ctx.strokeStyle = "rgba(71, 85, 105, 0.15)";
+  ctx.lineWidth = 0.5;
   ctx.beginPath();
+  ctx.roundRect(px + 4, py + 4, CELL - 8, CELL - 8, 3);
+  ctx.fill();
+  ctx.stroke();
+}
+
+function drawWhiteboard(ctx, layout) {
+  ctx.save();
   
-  // Unified contiguous look: curve start/end edges
-  if (index === 0) {
-    ctx.roundRect(px + 4, py + 6, CELL - 4, CELL - 12, { tl: 4, bl: 4, tr: 0, br: 0 });
-  } else if (index === 2) {
-    ctx.roundRect(px, py + 6, CELL - 4, CELL - 12, { tl: 0, bl: 0, tr: 4, br: 4 });
-  } else {
-    ctx.rect(px, py + 6, CELL, CELL - 12);
-  }
+  // Whiteboard spans most of the front wall (x=0 through x=7)
+  // just like the real room photos show
+  const wbX = 4;
+  const wbW = Math.min(8, layout.labCols) * CELL - 8;
+  const wbY = 3;
+  const wbH = CELL * 0.48;
+  
+  // Whiteboard surface (light panel on dark background)
+  ctx.fillStyle = "rgba(180, 195, 210, 0.15)";
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(wbX, wbY, wbW, wbH, 3);
   ctx.fill();
   ctx.stroke();
   
-  // Put a tech device silhouette on the center block
-  if (index === 1) {
-    ctx.fillStyle = "rgba(56, 189, 248, 0.1)";
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.7)";
-    ctx.beginPath();
-    ctx.roundRect(px + 9, py + 9, CELL - 18, 9, 2);
-    ctx.fill();
-    ctx.stroke();
-  }
+  // TV/Monitor centered on the whiteboard (dark rectangle)
+  const tvW = CELL * 1.6;
+  const tvH = CELL * 0.3;
+  const tvX = wbX + wbW / 2 - tvW / 2;
+  const tvY = wbY + (wbH - tvH) / 2;
+  ctx.fillStyle = "rgba(10, 15, 25, 0.65)";
+  ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(tvX, tvY, tvW, tvH, 2);
+  ctx.fill();
+  ctx.stroke();
+  
+  // Narrow wooden ledge below whiteboard
+  ctx.fillStyle = "rgba(120, 90, 50, 0.2)";
+  ctx.fillRect(wbX, wbY + wbH, wbW, 2.5);
+  
+  ctx.restore();
 }
 
 function drawServerRackBlueprint(ctx, x, y) {
@@ -422,6 +446,7 @@ function drawMap() {
   // 5. Blueprint elements
   layout.workstations.forEach(([x, y]) => drawWorkstationBlueprint(ctx, x, y));
   layout.instructorDesk.forEach(([x, y], idx) => drawInstructorDeskBlueprint(ctx, x, y, idx));
+  drawWhiteboard(ctx, layout);
   layout.dataRacks.forEach(([x, y]) => drawServerRackBlueprint(ctx, x, y));
   
   drawLockerBlueprint(ctx, layout.locker[0], layout.locker[1]);
