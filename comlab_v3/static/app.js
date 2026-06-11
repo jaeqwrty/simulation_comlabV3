@@ -280,7 +280,7 @@ function drawLockerBlueprint(ctx, x, y) {
   ctx.fillText("LOCK", px + CELL / 2, py + CELL / 2);
 }
 
-function drawExitDoorBlueprint(ctx, x, y) {
+function drawExitDoorBlueprint(ctx, x, y, label) {
   const px = x * CELL;
   const py = y * CELL;
   
@@ -296,7 +296,7 @@ function drawExitDoorBlueprint(ctx, x, y) {
   ctx.font = "800 9px var(--font-sans)";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("EXIT", px + CELL / 2, py + CELL / 2);
+  ctx.fillText(label || "EXIT", px + CELL / 2, py + CELL / 2);
 }
 
 function drawDoorSwingBlueprint(ctx, exitCell) {
@@ -318,6 +318,76 @@ function drawDoorSwingBlueprint(ctx, exitCell) {
   ctx.moveTo((exitCell[0] + 1) * CELL, (exitCell[1] + 0.5) * CELL);
   ctx.lineTo((exitCell[0] + 1) * CELL + CELL * 0.42, (exitCell[1] + 0.5) * CELL - CELL * 0.42);
   ctx.stroke();
+}
+
+function drawHallwayWall(ctx, layout) {
+  const wallX = layout.labCols * CELL;
+  ctx.save();
+  
+  // Solid wall line at lab/hallway boundary (thick white line)
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.75)";
+  ctx.lineWidth = 4;
+  
+  const exitRows = new Set([layout.frontExit[1], layout.backExit[1]]);
+  for (let y = 0; y < layout.rows; y++) {
+    if (exitRows.has(y)) continue; // Skip door openings
+    ctx.beginPath();
+    ctx.moveTo(wallX, y * CELL);
+    ctx.lineTo(wallX, (y + 1) * CELL);
+    ctx.stroke();
+  }
+  
+  ctx.restore();
+}
+
+function drawPartitionWall(ctx, layout) {
+  if (!layout.partitionWall) return;
+  ctx.save();
+  
+  // Partition wall drawn between col 7 and col 8
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.5)";
+  ctx.lineWidth = 2.5;
+  ctx.setLineDash([5, 3]);
+  
+  for (const [x, y] of layout.partitionWall) {
+    ctx.beginPath();
+    ctx.moveTo((x + 1) * CELL, y * CELL + 2);
+    ctx.lineTo((x + 1) * CELL, (y + 1) * CELL - 2);
+    ctx.stroke();
+  }
+  
+  ctx.setLineDash([]);
+  // Fill partition cells with very subtle indicator
+  ctx.fillStyle = "rgba(51, 65, 85, 0.18)";
+  for (const [x, y] of layout.partitionWall) {
+    ctx.fillRect(x * CELL + 2, y * CELL + 2, CELL - 4, CELL - 4);
+  }
+  
+  ctx.restore();
+}
+
+function drawFireExtinguisherBlueprint(ctx, pos) {
+  if (!pos) return;
+  const px = pos[0] * CELL;
+  const py = pos[1] * CELL;
+  ctx.save();
+  
+  // Red cylinder body
+  ctx.fillStyle = "#f43f5e";
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.roundRect(px + CELL / 2 - 3, py + CELL / 2 - 6, 6, 12, 1.5);
+  ctx.fill();
+  ctx.stroke();
+  
+  // Extinguisher black nozzle head
+  ctx.fillStyle = "#475569";
+  ctx.beginPath();
+  ctx.rect(px + CELL / 2 - 4, py + CELL / 2 - 8, 8, 2);
+  ctx.fill();
+  
+  ctx.restore();
 }
 
 function drawMap() {
@@ -342,28 +412,35 @@ function drawMap() {
   ctx.strokeRect(0, 0, layout.labCols * CELL, layout.rows * CELL);
   ctx.lineWidth = 1;
 
-  // 3. Thermal Heatmap Congestion Bloom
+  // 3. Hallway wall and partition wall
+  drawHallwayWall(ctx, layout);
+  drawPartitionWall(ctx, layout);
+
+  // 4. Thermal Heatmap Congestion Bloom
   drawHeatmap(ctx, layout);
 
-  // 4. Blueprint elements
+  // 5. Blueprint elements
   layout.workstations.forEach(([x, y]) => drawWorkstationBlueprint(ctx, x, y));
   layout.instructorDesk.forEach(([x, y], idx) => drawInstructorDeskBlueprint(ctx, x, y, idx));
   layout.dataRacks.forEach(([x, y]) => drawServerRackBlueprint(ctx, x, y));
   
   drawLockerBlueprint(ctx, layout.locker[0], layout.locker[1]);
-  drawExitDoorBlueprint(ctx, layout.frontExit[0], layout.frontExit[1]);
-  drawExitDoorBlueprint(ctx, layout.backExit[0], layout.backExit[1]);
+  drawExitDoorBlueprint(ctx, layout.frontExit[0], layout.frontExit[1], "ENTR");
+  drawExitDoorBlueprint(ctx, layout.backExit[0], layout.backExit[1], "EXIT");
   
   drawDoorSwingBlueprint(ctx, layout.frontExit);
   drawDoorSwingBlueprint(ctx, layout.backExit);
   
+  drawFireExtinguisherBlueprint(ctx, layout.extinguisherExit);
+  drawFireExtinguisherBlueprint(ctx, layout.extinguisherEntrance);
+  
   drawStaircaseBlueprint(ctx, layout.frontStairs[0], layout.frontStairs[1]);
   drawStaircaseBlueprint(ctx, layout.emergencyStairs[0], layout.emergencyStairs[1]);
   
-  // 5. pulsing fire smoke plume
+  // 6. pulsing fire smoke plume
   drawFireSmoke(ctx, layout.fireOrigin[0], layout.fireOrigin[1]);
   
-  // 6. Agents avatars
+  // 7. Agents avatars
   state.agents.filter((agent) => !agent.exited).forEach((agent) => drawAgent(ctx, agent));
 }
 

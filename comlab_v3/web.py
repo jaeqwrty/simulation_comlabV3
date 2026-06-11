@@ -17,12 +17,16 @@ from .engine import (
     CURRENT_LOCKER,
     DATA_RACKS,
     EMERGENCY_STAIRS,
+    EXTINGUISHER_ENTRANCE,
+    EXTINGUISHER_EXIT,
     FRONT_EXIT,
     FRONT_STAIRS,
     HALL_COLS,
+    HALLWAY_WALL,
     INSTRUCTOR_DESK,
     LAB_COLS,
     MODIFIED_LOCKER,
+    PARTITION_WALL,
     ROWS,
     WORKSTATIONS,
     Simulation,
@@ -160,6 +164,10 @@ def layout_payload(mode: str, fire_origin: str):
         "locker": locker_for(mode),
         "fireOrigin": fire_origin_for(fire_origin),
         "cell": CELL,
+        "hallwayWall": sorted(HALLWAY_WALL),
+        "partitionWall": sorted(PARTITION_WALL),
+        "extinguisherExit": EXTINGUISHER_EXIT,
+        "extinguisherEntrance": EXTINGUISHER_ENTRANCE,
     }
 
 

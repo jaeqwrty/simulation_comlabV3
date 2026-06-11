@@ -47,6 +47,30 @@ class SimulationValidationTests(unittest.TestCase):
                 self.assertTrue(find_path((4, 0), FRONT_EXIT, sim.blocked_cells))
                 self.assertTrue(find_path((7, 11), BACK_EXIT, sim.blocked_cells))
 
+    def test_hallway_wall_blocks_non_exit_cells(self):
+        """Column 8 should be impassable except at exit doors."""
+        sim = Simulation("current", panic=True, fire_origin="data")
+        from comlab_v3.engine import is_obstacle
+        for y in range(12):
+            if (8, y) in {FRONT_EXIT, BACK_EXIT}:
+                self.assertFalse(is_obstacle((8, y), sim.blocked_cells),
+                                 f"Exit (8,{y}) should be passable")
+            else:
+                self.assertTrue(is_obstacle((8, y), sim.blocked_cells),
+                                f"Wall (8,{y}) should be an obstacle")
+
+    def test_partition_wall_cells_are_obstacles(self):
+        """Partition divider blocks (7,4), (7,6), (7,8) but leaves door access open."""
+        sim = Simulation("current", panic=True, fire_origin="data")
+        from comlab_v3.engine import is_obstacle
+        # Partition cells are obstacles
+        self.assertTrue(is_obstacle((7, 4), sim.blocked_cells))
+        self.assertTrue(is_obstacle((7, 6), sim.blocked_cells))
+        self.assertTrue(is_obstacle((7, 8), sim.blocked_cells))
+        # Door access cells must remain open
+        self.assertFalse(is_obstacle((7, 2), sim.blocked_cells))
+        self.assertFalse(is_obstacle((7, 10), sim.blocked_cells))
+
 
 if __name__ == "__main__":
     unittest.main()

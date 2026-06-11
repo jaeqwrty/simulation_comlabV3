@@ -28,6 +28,19 @@ INSTRUCTOR_DESK = {(1, 0), (2, 0), (3, 0)}
 WORKSTATIONS = [(x, 1 + row * 2) for row in range(6) for x in (0, 1, 2, 5, 6, 7)]
 WORKSTATIONS_SET = set(WORKSTATIONS)
 
+# Solid wall between lab and hallway — only exit doors are passable
+HALLWAY_WALL = {(8, y) for y in range(ROWS)} - {FRONT_EXIT, BACK_EXIT}
+
+# Partition divider on room side concealing data racks
+# Runs from professor's workstation (front) to student assistant table (back)
+# Blocks column-7 gaps between bench rows in the middle section
+PARTITION_WALL = {(7, 4), (7, 6), (7, 8)}
+
+# Fire extinguisher positions
+EXTINGUISHER_EXIT = (7, 1)       # Near EXIT door / professor's workstation
+EXTINGUISHER_ENTRANCE = (7, 10)  # Near ENTRANCE door
+
+
 
 @dataclass
 class Agent:
@@ -139,7 +152,11 @@ class Simulation:
         
         # Precompute static blocked cells set for speed. Lockers are destination
         # cells, so they need to remain pathable for locker-bound agents.
-        self.blocked_cells = set(INSTRUCTOR_DESK) | set(DATA_RACKS) | {self.fire_origin}
+        self.blocked_cells = (
+            set(INSTRUCTOR_DESK) | set(DATA_RACKS)
+            | HALLWAY_WALL | PARTITION_WALL
+            | {self.fire_origin}
+        )
         
         self.time = 0
         self.trips = 0
