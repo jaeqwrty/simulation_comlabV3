@@ -120,7 +120,7 @@ function syncFromState() {
   
   els.layoutTitle.textContent = state.mode === "current" ? "Current Layout" : "Modified Layout";
   els.layoutNote.textContent = state.mode === "current"
-    ? "Locker near Back-Right exit creates cross-traffic."
+    ? "Locker near the Entrance door creates cross-traffic with evacuating agents."
     : "Locker is relocated away from the exit path while doors and hallway remain unchanged.";
 }
 
@@ -425,8 +425,8 @@ function drawMap() {
   layout.dataRacks.forEach(([x, y]) => drawServerRackBlueprint(ctx, x, y));
   
   drawLockerBlueprint(ctx, layout.locker[0], layout.locker[1]);
-  drawExitDoorBlueprint(ctx, layout.frontExit[0], layout.frontExit[1], "ENTR");
-  drawExitDoorBlueprint(ctx, layout.backExit[0], layout.backExit[1], "EXIT");
+  drawExitDoorBlueprint(ctx, layout.frontExit[0], layout.frontExit[1], "EXIT");
+  drawExitDoorBlueprint(ctx, layout.backExit[0], layout.backExit[1], "ENTR");
   
   drawDoorSwingBlueprint(ctx, layout.frontExit);
   drawDoorSwingBlueprint(ctx, layout.backExit);
