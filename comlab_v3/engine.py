@@ -17,7 +17,7 @@ HALL_COLS = 4
 ROWS = 12
 COLS = LAB_COLS + HALL_COLS
 
-FRONT_EXIT = (8, 2)
+FRONT_EXIT = (8, 0)
 BACK_EXIT = (8, 10)
 FRONT_STAIRS = (12, 1)
 EMERGENCY_STAIRS = (12, 10)
@@ -34,10 +34,10 @@ HALLWAY_WALL = {(8, y) for y in range(ROWS)} - {FRONT_EXIT, BACK_EXIT}
 # Partition divider on room side concealing data racks
 # Runs from professor's workstation (front) to student assistant table (back)
 # Blocks column-7 gaps between bench rows in the middle section
-PARTITION_WALL = {(7, 4), (7, 6), (7, 8)}
+PARTITION_WALL = {(7, 2), (7, 4), (7, 6), (7, 8)}
 
 # Fire extinguisher positions
-EXTINGUISHER_EXIT = (7, 1)       # Near EXIT door / professor's workstation
+EXTINGUISHER_EXIT = (7, 0)       # Near EXIT door / professor's workstation
 EXTINGUISHER_ENTRANCE = (7, 10)  # Near ENTRANCE door
 
 

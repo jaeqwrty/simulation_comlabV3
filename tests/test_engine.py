@@ -60,15 +60,16 @@ class SimulationValidationTests(unittest.TestCase):
                                 f"Wall (8,{y}) should be an obstacle")
 
     def test_partition_wall_cells_are_obstacles(self):
-        """Partition divider blocks (7,4), (7,6), (7,8) but leaves door access open."""
+        """Partition divider blocks (7,2), (7,4), (7,6), (7,8) but leaves door access open."""
         sim = Simulation("current", panic=True, fire_origin="data")
         from comlab_v3.engine import is_obstacle
         # Partition cells are obstacles
+        self.assertTrue(is_obstacle((7, 2), sim.blocked_cells))
         self.assertTrue(is_obstacle((7, 4), sim.blocked_cells))
         self.assertTrue(is_obstacle((7, 6), sim.blocked_cells))
         self.assertTrue(is_obstacle((7, 8), sim.blocked_cells))
         # Door access cells must remain open
-        self.assertFalse(is_obstacle((7, 2), sim.blocked_cells))
+        self.assertFalse(is_obstacle((7, 0), sim.blocked_cells))
         self.assertFalse(is_obstacle((7, 10), sim.blocked_cells))
 
 
