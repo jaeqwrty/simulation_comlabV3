@@ -17,8 +17,13 @@ from .engine import (
     CURRENT_LOCKER,
     DATA_RACKS,
     EMERGENCY_STAIRS,
+    EXTINGUISHER_ASSISTANT,
     EXTINGUISHER_ENTRANCE,
     EXTINGUISHER_EXIT,
+    EXTINGUISHER_PROFESSOR,
+    EXTINGUISHER_SHELVES,
+    FIRE_EXTINGUISHERS,
+    EXTRA_PCS,
     FRONT_EXIT,
     FRONT_STAIRS,
     HALL_COLS,
@@ -28,6 +33,10 @@ from .engine import (
     MODIFIED_LOCKER,
     PARTITION_WALL,
     ROWS,
+    SERVICE_BAY_PASSAGE,
+    SHELVES,
+    STUDENT_ASSISTANT_DESK,
+    WORKSTATION_ROWS,
     WORKSTATIONS,
     Simulation,
     fire_origin_for,
@@ -73,6 +82,9 @@ class SimulationService:
         self.panic = bool(config.get("panic", self.panic))
         self.fire_origin = config.get("fireOrigin", self.fire_origin)
         self.speed = float(config.get("speed", self.speed))
+        
+        if hasattr(self, "sim") and self.sim:
+            self.sim.panic = self.panic
 
     def reset(self, config: dict | None = None):
         with self.lock:
@@ -116,10 +128,12 @@ class SimulationService:
                 "id": agent.agent_id,
                 "kind": agent.kind,
                 "behavior": agent.behavior,
+                "role": role_for_agent(agent),
                 "x": agent.x,
                 "y": agent.y,
                 "phase": agent.phase,
                 "exited": agent.exited,
+                "stamped_until": agent.stamped_until,
             }
             for agent in sim.agents
         ]
@@ -147,31 +161,52 @@ class SimulationService:
 
 
 def layout_payload(mode: str, fire_origin: str):
+    sim = Simulation(mode, fire_origin=fire_origin)
     return {
         "rows": ROWS,
         "cols": COLS,
         "labCols": LAB_COLS,
         "hallCols": HALL_COLS,
-        "workstations": WORKSTATIONS,
-        "instructorDesk": sorted(INSTRUCTOR_DESK),
-        "dataRacks": sorted(DATA_RACKS),
+        "workstations": sim.workstations,
+        "workstationRows": sim.workstation_rows,
+        "instructorDesk": sorted(sim.instructor_desk),
+        "dataRacks": sorted(sim.data_racks),
+        "studentAssistantDesk": sorted(sim.student_assistant_desk),
+        "extraPcs": sorted(sim.extra_pcs),
+        "shelves": sorted(sim.shelves),
         "frontExit": FRONT_EXIT,
         "backExit": BACK_EXIT,
         "frontStairs": FRONT_STAIRS,
         "emergencyStairs": EMERGENCY_STAIRS,
         "currentLocker": CURRENT_LOCKER,
         "modifiedLocker": MODIFIED_LOCKER,
-        "locker": locker_for(mode),
-        "fireOrigin": fire_origin_for(fire_origin),
+        "locker": sim.locker,
+        "fireOrigin": sim.fire_origin,
         "cell": CELL,
         "hallwayWall": sorted(HALLWAY_WALL),
-        "partitionWall": sorted(PARTITION_WALL),
-        "extinguisherExit": EXTINGUISHER_EXIT,
-        "extinguisherEntrance": EXTINGUISHER_ENTRANCE,
+        "partitionWall": sorted(sim.partition_wall),
+        "serviceBayPassage": sim.service_bay_passage,
+        "extinguisherExit": sim.extinguisher_exit,
+        "extinguisherEntrance": sim.extinguisher_entrance,
+        "extinguisherProfessor": sim.extinguisher_professor,
+        "extinguisherAssistant": sim.extinguisher_assistant,
+        "extinguisherShelves": sim.extinguisher_shelves,
+        "fireExtinguishers": list(sim.fire_extinguishers),
     }
 
 
 SERVICE = SimulationService()
+
+
+def role_for_agent(agent) -> str:
+    roles = {
+        "I01": "Professor / extinguisher lead",
+        "PA1": "Front aisle student aide",
+        "PA2": "Back aisle student aide",
+        "LC1": "Front exit door holder",
+        "LC2": "Back exit door holder",
+    }
+    return roles.get(agent.agent_id, agent.behavior)
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -35,6 +35,7 @@
 
 html {
   overflow-y: auto;
+  overflow-x: hidden;
   height: 100%;
 }
 
@@ -51,6 +52,7 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Compact Scrollbar Styling */
@@ -70,9 +72,10 @@ body {
 }
 
 .shell {
-  width: min(1280px, calc(100vw - 24px));
+  width: 100%;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 12px 0 100px;
+  padding: 12px 12px 100px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -145,6 +148,10 @@ h1 {
   border-radius: 12px;
   padding: 8px 12px;
   box-shadow: var(--shadow);
+}
+
+.controls > * {
+  min-width: 0;
 }
 
 /* Uniform minimalist interactive widgets */
@@ -236,6 +243,7 @@ label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  max-width: 100%;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
@@ -248,6 +256,8 @@ label {
 
 label select {
   height: 30px;
+  min-width: 0;
+  width: 100%;
   border: none;
   background-color: transparent;
   padding: 0 24px 0 4px;
@@ -297,6 +307,21 @@ input[type="range"]::-webkit-slider-thumb:hover {
   grid-template-columns: 1fr 340px;
   gap: 12px;
   align-items: start;
+  min-width: 0;
+}
+
+.workspace-left {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.bottom-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: stretch;
 }
 
 /* MAP PANEL Styling */
@@ -308,14 +333,20 @@ input[type="range"]::-webkit-slider-thumb:hover {
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .panel-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
+}
+
+.panel-head > div {
+  min-width: 0;
 }
 
 .panel-head h2 {
@@ -328,9 +359,11 @@ input[type="range"]::-webkit-slider-thumb:hover {
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 2px;
+  overflow-wrap: anywhere;
 }
 
 .mini-badge {
+  flex: 0 0 auto;
   font-size: 9px;
   font-weight: 800;
   text-transform: uppercase;
@@ -340,6 +373,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   background: rgba(148, 163, 184, 0.1);
   border: 1px solid var(--border);
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .map-wrap {
@@ -350,9 +384,12 @@ input[type="range"]::-webkit-slider-thumb:hover {
   background: rgba(5, 8, 15, 0.4);
   border-bottom-left-radius: 12px;
   border-bottom-right-radius: 12px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 #mapCanvas {
+  display: block;
   max-width: 442px;
   width: 100%;
   height: auto;
@@ -464,6 +501,51 @@ input[type="range"]::-webkit-slider-thumb:hover {
   border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
+.staff-roles {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.staff-role {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(51, 65, 85, 0.45);
+}
+
+.staff-role-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.staff-role-head strong {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.staff-role-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.staff-role p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 /* Console Event Logs */
 .events {
   height: 140px;
@@ -513,17 +595,11 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .badge-default { background: rgba(148, 163, 184, 0.1); color: var(--text-muted); }
 
 /* COMPARISON DISPLAY Styling */
-.comparison {
-  background: var(--panel);
-  backdrop-filter: blur(16px);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
+.comparison-body {
   padding: 16px;
-  margin-top: 4px;
 }
 
-.comparison strong {
+.comparison-body strong {
   display: block;
   text-align: center;
   font-size: 13px;
@@ -606,7 +682,7 @@ td:first-child {
 
 @media (max-width: 720px) {
   .shell {
-    width: calc(100vw - 16px);
+    padding: 8px 8px 100px;
   }
 
   .topbar {
@@ -628,6 +704,36 @@ td:first-child {
   }
   
   .controls {
+    display: grid;
+    grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .controls button,
+  .controls label {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .panel-head {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .mini-badge {
+    display: none;
+  }
+
+  .map-wrap {
+    padding: 10px;
+  }
+
+  .speed-control {
+    grid-column: auto;
+    min-width: 0;
+  }
+
+  #compareBtn {
+    grid-column: auto;
   }
 }

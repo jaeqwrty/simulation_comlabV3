@@ -82,19 +82,30 @@
 
     <!-- Simulation Main Grid -->
     <section class="workspace">
-      <!-- Floor Plan Map Panel -->
-      <section class="map-panel">
-        <div class="panel-head">
-          <div>
-            <h2 id="layoutTitle">Current Layout</h2>
-            <p id="layoutNote">Locker near Back-Right exit creates cross-traffic.</p>
+      <!-- Left side: Model Map & Comparison -->
+      <div class="workspace-left">
+        <!-- MAP PANEL Card -->
+        <section class="map-panel">
+          <div class="panel-head">
+            <div>
+              <h2 id="layoutTitle">Current Layout</h2>
+              <p id="layoutNote">Locker near Back-Right exit creates cross-traffic.</p>
+            </div>
+            <span class="mini-badge">Python ABM Logic</span>
           </div>
-          <span class="mini-badge">Python ABM Logic</span>
-        </div>
-        <div class="map-wrap">
-          <canvas id="mapCanvas" width="442" height="408"></canvas>
-        </div>
-      </section>
+          <div class="map-wrap">
+            <canvas id="mapCanvas" width="442" height="408"></canvas>
+          </div>
+        </section>
+
+        <!-- Side-by-Side Comparison Card -->
+        <section class="card">
+          <h2>Layout Comparison</h2>
+          <div id="comparison" class="comparison-body">
+            <strong>Side-by-side results will appear here after running comparison.</strong>
+          </div>
+        </section>
+      </div>
 
       <!-- Sidebar Analytics Panels -->
       <aside class="sidebar">
@@ -129,11 +140,6 @@
           <div id="events" class="events">No incidents yet.</div>
         </section>
       </aside>
-    </section>
-
-    <!-- Side-by-Side Comparison Container -->
-    <section id="comparison" class="comparison">
-      <strong>Side-by-side results will appear here after running comparison.</strong>
     </section>
   </main>
 

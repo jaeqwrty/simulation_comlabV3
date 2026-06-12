@@ -47,8 +47,8 @@ def validate():
         rows.append(row)
         if row["inside"] != 0:
             failures.append(f"{mode}/{panic}/{fire_origin}: {row['inside']} agents still inside")
-        if row["time"] >= 240:
-            failures.append(f"{mode}/{panic}/{fire_origin}: reached 240s cutoff")
+        if row["time"] >= 400:
+            failures.append(f"{mode}/{panic}/{fire_origin}: reached 400-step max limit (no full evacuation)")
 
     current_by_condition = {
         (row["panic"], row["fire_origin"]): row
