@@ -55,6 +55,17 @@ python run.py
 - Door collisions, trips/falls, smoke slowdown, crowd density, and congestion heat
 - Total evacuation time, active agents, evacuation rate chart, incident log, and side-by-side results
 
+## Key Files
+
+| File | Purpose |
+| --- | --- |
+| `run.py` | Main entry point to launch the simulation and web server. |
+| `comlab_v3/engine.py` | Core agent-based simulation engine. |
+| `comlab_v3/web.py` | Web server providing the user interface. |
+| `comlab_v3/static/` | Frontend HTML, CSS, and JavaScript for the UI. |
+| `scripts/validate_benchmark.py` | Runs validation and benchmark tests. |
+| `tests/test_engine.py` | Unit tests for the simulation engine. |
+
 ## Scenario Flow
 
 ```mermaid
