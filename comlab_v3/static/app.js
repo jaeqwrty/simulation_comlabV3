@@ -1027,17 +1027,6 @@ function drawPartitionWall(ctx, layout) {
 
   const isMod = state && state.mode === "modified";
   if (isMod) {
-    const serviceY = visualCenter(0, passageY).y - CELL / 2 + 2;
-    const left = visualCenter(0, passageY).x - CELL / 2 + 6;
-    const right = visualCenter(7, passageY).x + CELL / 2 - 6;
-    const passage = visualCenter((layout.serviceBayPassage || [6, 10])[0], passageY);
-
-    ctx.beginPath();
-    ctx.moveTo(left, serviceY);
-    ctx.lineTo(passage.x - 18, serviceY);
-    ctx.moveTo(passage.x + 18, serviceY);
-    ctx.lineTo(right, serviceY);
-    ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
     return;
@@ -1066,12 +1055,6 @@ function drawServiceBaySketchPath(ctx, layout) {
   const passage = layout.serviceBayPassage || (isMod ? [6, 10] : [7, 10]);
   const passageCenter = visualCenter(passage[0], passage[1]);
   if (isMod) {
-    drawBlueprintTag(ctx, "Pass", passageCenter.x, passageCenter.y - 16, {
-      tone: "teal",
-      size: 5.6,
-      paddingX: 4,
-      paddingY: 2
-    });
     ctx.restore();
     return;
   }
@@ -1163,25 +1146,6 @@ function drawFireExtinguisherBlueprint(ctx, pos) {
   ctx.textBaseline = "middle";
   ctx.fillText("FE", iconX, iconY + 1);
 
-  ctx.restore();
-}
-
-function drawClearEgressLanes(ctx, layout) {
-  if (!(state && state.mode === "modified")) return;
-
-  ctx.save();
-  ctx.fillStyle = "rgba(16, 185, 129, 0.06)";
-  ctx.strokeStyle = "rgba(16, 185, 129, 0.22)";
-  ctx.lineWidth = 1;
-  ctx.setLineDash([7, 5]);
-
-  const centerX = visualCenter(4, 5).x;
-  ctx.beginPath();
-  ctx.roundRect(centerX - 16, CELL * 0.9, 32, CELL * 10.3, 8);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.setLineDash([]);
   ctx.restore();
 }
 
@@ -1324,9 +1288,9 @@ function drawRearServiceBayBlueprint(ctx, layout) {
   const serviceLeft = visualCenter(0, 11);
   const serviceRight = visualCenter(5, 11);
   const serviceX = serviceLeft.x - CELL / 2 + 4;
-  const serviceY = serviceLeft.y - CELL / 2 + 4;
+  const serviceY = MAP_H - 60;
   const serviceW = serviceRight.x + CELL / 2 - serviceX - 4;
-  const serviceH = CELL - 8;
+  const serviceH = 56;
   const dividerX = (visualCenter(2, 11).x + visualCenter(3, 11).x) / 2;
 
   ctx.fillStyle = "rgba(249, 115, 22, 0.10)";
@@ -1336,6 +1300,11 @@ function drawRearServiceBayBlueprint(ctx, layout) {
   ctx.roundRect(serviceX, serviceY, serviceW, serviceH, 5);
   ctx.fill();
   ctx.stroke();
+
+  ctx.fillStyle = "rgba(249, 115, 22, 0.13)";
+  ctx.beginPath();
+  ctx.roundRect(serviceX + 1, serviceY + 1, dividerX - serviceX - 2, serviceH - 2, 4);
+  ctx.fill();
 
   ctx.fillStyle = "rgba(20, 184, 166, 0.12)";
   ctx.beginPath();
@@ -1348,7 +1317,17 @@ function drawRearServiceBayBlueprint(ctx, layout) {
   ctx.lineTo(dividerX, serviceY + serviceH - 5);
   ctx.stroke();
 
-  drawBlueprintTag(ctx, "Custodian\nData Rack", serviceX + (dividerX - serviceX) / 2, serviceY - 24, {
+  ctx.strokeStyle = "rgba(254, 215, 170, 0.24)";
+  for (let x = serviceX + 14; x < dividerX - 8; x += 12) {
+    ctx.beginPath();
+    ctx.moveTo(x, serviceY + 26);
+    ctx.lineTo(x + 7, serviceY + 26);
+    ctx.moveTo(x, serviceY + 32);
+    ctx.lineTo(x + 7, serviceY + 32);
+    ctx.stroke();
+  }
+
+  drawBlueprintTag(ctx, "Custodian\nData Rack", serviceX + (dividerX - serviceX) / 2, serviceY + 13, {
     tone: "amber",
     size: 5.4,
     paddingX: 4,
@@ -1356,16 +1335,7 @@ function drawRearServiceBayBlueprint(ctx, layout) {
     lineHeight: 5.9
   });
 
-  const passage = visualCenter((layout.serviceBayPassage || [6, 11])[0], (layout.serviceBayPassage || [6, 11])[1]);
-  ctx.fillStyle = "rgba(16, 185, 129, 0.08)";
-  ctx.strokeStyle = "rgba(16, 185, 129, 0.45)";
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.roundRect(passage.x - 16, passage.y - CELL / 2 + 4, 32, CELL - 8, 5);
-  ctx.fill();
-  ctx.stroke();
-
-  drawBlueprintTag(ctx, "Student\nAssistant", dividerX + (serviceX + serviceW - dividerX) / 2, serviceY - 24, {
+  drawBlueprintTag(ctx, "Student\nAssistant", dividerX + (serviceX + serviceW - dividerX) / 2, serviceY + 13, {
     tone: "teal",
     size: 5.4,
     paddingX: 4,
@@ -1606,17 +1576,26 @@ function drawMap() {
 
     ctx.strokeStyle = "rgba(56, 189, 248, 0.1)";
     ctx.lineWidth = 1;
-    for (const y of layout.workstationRows.map((row) => visualCenter(0, row).y)) {
+    for (const row of layout.workstationRows) {
+      const y = visualCenter(0, row).y;
       if (state && state.mode === "modified") {
-        ctx.beginPath();
-        ctx.moveTo(50, y);
-        ctx.lineTo(182, y);
-        ctx.stroke();
+        const rowCells = layout.workstations.filter(([, cellY]) => cellY === row);
+        const hasLeftTable = rowCells.some(([x]) => x >= 0 && x <= 3);
+        const hasRightTable = rowCells.some(([x]) => x >= 4 && x <= 7);
 
-        ctx.beginPath();
-        ctx.moveTo(210, y);
-        ctx.lineTo(342, y);
-        ctx.stroke();
+        if (hasLeftTable) {
+          ctx.beginPath();
+          ctx.moveTo(50, y);
+          ctx.lineTo(182, y);
+          ctx.stroke();
+        }
+
+        if (hasRightTable) {
+          ctx.beginPath();
+          ctx.moveTo(210, y);
+          ctx.lineTo(342, y);
+          ctx.stroke();
+        }
       } else {
         ctx.beginPath();
         ctx.moveTo(LAB_LEFT + 8, y);
@@ -1643,7 +1622,6 @@ function drawMap() {
     drawHallwayLabels(ctx, layout);
 
     // 4. Thermal Heatmap Congestion Bloom
-    drawClearEgressLanes(ctx, layout);
     drawHeatmap(ctx, layout);
 
     // 5. Blueprint elements
