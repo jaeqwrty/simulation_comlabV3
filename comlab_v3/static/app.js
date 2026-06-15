@@ -534,6 +534,55 @@ function drawRearFacingMonitorTile(ctx, cx, cy) {
   ctx.restore();
 }
 
+function drawBlueprintTag(ctx, label, x, y, options = {}) {
+  const {
+    tone = "blue",
+    align = "center",
+    size = 6.5,
+    paddingX = 5,
+    paddingY = 3,
+    lineHeight = size + 2,
+    alpha = 0.9
+  } = options;
+  const palette = {
+    blue: ["rgba(15, 23, 42, 0.82)", "rgba(96, 165, 250, 0.42)", "rgba(191, 219, 254, 0.92)"],
+    teal: ["rgba(6, 78, 59, 0.58)", "rgba(45, 212, 191, 0.42)", "rgba(153, 246, 228, 0.94)"],
+    amber: ["rgba(120, 53, 15, 0.58)", "rgba(251, 191, 36, 0.50)", "rgba(254, 243, 199, 0.95)"],
+    red: ["rgba(127, 29, 29, 0.58)", "rgba(248, 113, 113, 0.48)", "rgba(254, 202, 202, 0.95)"],
+    violet: ["rgba(88, 28, 135, 0.52)", "rgba(217, 70, 239, 0.44)", "rgba(245, 208, 254, 0.95)"],
+    slate: ["rgba(15, 23, 42, 0.74)", "rgba(148, 163, 184, 0.35)", "rgba(226, 232, 240, 0.86)"]
+  }[tone] || ["rgba(15, 23, 42, 0.80)", "rgba(148, 163, 184, 0.38)", "rgba(226, 232, 240, 0.90)"];
+  const lines = String(label).toUpperCase().split("\n");
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = `800 ${size}px var(--font-sans)`;
+  const textW = Math.max(...lines.map((line) => ctx.measureText(line).width));
+  const w = textW + paddingX * 2;
+  const h = lines.length * lineHeight + paddingY * 2 - 1;
+  let left = x - w / 2;
+  if (align === "left") left = x;
+  if (align === "right") left = x - w;
+  const top = y - h / 2;
+
+  ctx.fillStyle = palette[0];
+  ctx.strokeStyle = palette[1];
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.roundRect(left, top, w, h, 3);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = palette[2];
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  lines.forEach((line, index) => {
+    const ty = top + paddingY + lineHeight / 2 + index * lineHeight;
+    ctx.fillText(line, left + w / 2, ty);
+  });
+  ctx.restore();
+}
+
 function drawCurrentRearExtraPcArea(ctx, layout) {
   if (!layout.extraPcs || !layout.extraPcs.length) return;
 
@@ -551,11 +600,7 @@ function drawCurrentRearExtraPcArea(ctx, layout) {
   ctx.lineTo(right, centerY + 3);
   ctx.stroke();
 
-  ctx.fillStyle = "rgba(191, 219, 254, 0.78)";
-  ctx.font = "800 7px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("EXTRA PC'S", (left + right) / 2, centerY - 18);
+  drawBlueprintTag(ctx, "Extra PCs", (left + right) / 2, centerY - 18, { tone: "blue", size: 6.5 });
 
   centers.forEach((pos) => drawRearFacingMonitorTile(ctx, pos.x, pos.y + 1));
   ctx.restore();
@@ -684,6 +729,13 @@ function drawWhiteboard(ctx, layout) {
   ctx.fillStyle = "rgba(148,163,184,0.12)";
   ctx.fillRect(tvX + tvW / 2 - 6, tvY + tvH + 3, 12, 3);
 
+  drawBlueprintTag(ctx, "White Board", wbX + 34, wbY + wbH / 2, {
+    tone: "slate",
+    size: 5.4,
+    paddingX: 4,
+    paddingY: 2
+  });
+
   ctx.restore();
 }
 
@@ -747,12 +799,13 @@ function drawUnifiedStorageBlueprint(ctx, layout) {
       ctx.stroke();
     }
 
-    ctx.fillStyle = "rgba(254, 243, 199, 0.94)";
-    ctx.font = "800 6.5px var(--font-sans)";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("BAGS", x + w / 2, y + h / 2 - 4);
-    ctx.fillText("SHELVES", x + w / 2, y + h / 2 + 5);
+    drawBlueprintTag(ctx, "Bags\nShelves", x + w / 2, y - 40, {
+      tone: "amber",
+      size: 5.5,
+      paddingX: 3,
+      paddingY: 2,
+      lineHeight: 6
+    });
     ctx.restore();
     return;
   }
@@ -809,16 +862,21 @@ function drawStorageBlueprint(ctx, pos, label, tone = "amber") {
     ctx.stroke();
   }
 
-  ctx.fillStyle = text;
-  ctx.font = isCombined ? "800 6.5px var(--font-sans)" : "800 7.5px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const lines = String(label).split("\n");
-  const lineHeight = isCombined ? 7 : 0;
-  const startY = py + CELL / 2 - ((lines.length - 1) * lineHeight) / 2;
-  lines.forEach((line, index) => {
-    ctx.fillText(line, px + CELL / 2, startY + index * lineHeight);
-  });
+  if (isCombined) {
+    drawBlueprintTag(ctx, "Bags\nShelves", px + CELL / 2, py - 1, {
+      tone: "amber",
+      size: 5.2,
+      paddingX: 3,
+      paddingY: 2,
+      lineHeight: 5.8
+    });
+  } else {
+    ctx.fillStyle = text;
+    ctx.font = "800 7.5px var(--font-sans)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(label).toUpperCase(), px + CELL / 2, py + CELL / 2);
+  }
   ctx.restore();
 }
 
@@ -1008,11 +1066,12 @@ function drawServiceBaySketchPath(ctx, layout) {
   const passage = layout.serviceBayPassage || (isMod ? [6, 10] : [7, 10]);
   const passageCenter = visualCenter(passage[0], passage[1]);
   if (isMod) {
-    ctx.fillStyle = "rgba(16, 185, 129, 0.9)";
-    ctx.font = "700 7px var(--font-sans)";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("PASS", passageCenter.x, passageCenter.y);
+    drawBlueprintTag(ctx, "Pass", passageCenter.x, passageCenter.y - 16, {
+      tone: "teal",
+      size: 5.6,
+      paddingX: 4,
+      paddingY: 2
+    });
     ctx.restore();
     return;
   }
@@ -1044,11 +1103,12 @@ function drawServiceBaySketchPath(ctx, layout) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  ctx.fillStyle = "rgba(16, 185, 129, 0.9)";
-  ctx.font = "700 8px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("PASSAGE", passageCenter.x, passageCenter.y);
+  drawBlueprintTag(ctx, "Passage", passageCenter.x, passageCenter.y + 2, {
+    tone: "teal",
+    size: 5.8,
+    paddingX: 4,
+    paddingY: 2
+  });
 
   ctx.restore();
 }
@@ -1125,6 +1185,20 @@ function drawClearEgressLanes(ctx, layout) {
   ctx.restore();
 }
 
+function drawStudentWorkstationAreaLabel(ctx) {
+  const isMod = state && state.mode === "modified";
+  const x = isMod ? LAB_RIGHT / 2 : 122;
+  const y = isMod ? 49 : 49;
+  drawBlueprintTag(ctx, isMod ? "Student Workstations\n36 PCs" : "Student Workstations", x, y, {
+    tone: "blue",
+    size: 5.8,
+    paddingX: 5,
+    paddingY: 2,
+    lineHeight: 6.4,
+    alpha: 0.82
+  });
+}
+
 function drawLabeledBlock(ctx, x, y, w, h, label, fill, stroke, align = "center") {
   ctx.save();
   ctx.fillStyle = fill;
@@ -1173,11 +1247,12 @@ function drawTeacherArea(ctx) {
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "rgba(191, 219, 254, 0.9)";
-    ctx.font = "800 8px var(--font-sans)";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("PROFESSOR", teacher.x, teacher.y - 10);
+    drawBlueprintTag(ctx, "Professor", teacher.x, teacher.y - 10, {
+      tone: "blue",
+      size: 5.5,
+      paddingX: 4,
+      paddingY: 2
+    });
   } else {
     ctx.fillStyle = "rgba(59, 130, 246, 0.16)";
     ctx.strokeStyle = "rgba(59, 130, 246, 0.55)";
@@ -1187,11 +1262,12 @@ function drawTeacherArea(ctx) {
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "rgba(191, 219, 254, 0.9)";
-    ctx.font = "800 8px var(--font-sans)";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("PROFESSOR", teacher.x - 64, teacher.y - 9);
+    drawBlueprintTag(ctx, "Professor", teacher.x - 64, teacher.y - 9, {
+      tone: "blue",
+      size: 5.5,
+      paddingX: 4,
+      paddingY: 2
+    });
     drawMonitorTile(ctx, teacher.x - 76, teacher.y - 2, 24, 13);
   }
   ctx.restore();
@@ -1272,11 +1348,13 @@ function drawRearServiceBayBlueprint(ctx, layout) {
   ctx.lineTo(dividerX, serviceY + serviceH - 5);
   ctx.stroke();
 
-  ctx.fillStyle = "rgba(254, 215, 170, 0.78)";
-  ctx.font = "800 7px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("DATA RACK", serviceX + (dividerX - serviceX) / 2, serviceY - 5);
+  drawBlueprintTag(ctx, "Custodian\nData Rack", serviceX + (dividerX - serviceX) / 2, serviceY - 24, {
+    tone: "amber",
+    size: 5.4,
+    paddingX: 4,
+    paddingY: 2,
+    lineHeight: 5.9
+  });
 
   const passage = visualCenter((layout.serviceBayPassage || [6, 11])[0], (layout.serviceBayPassage || [6, 11])[1]);
   ctx.fillStyle = "rgba(16, 185, 129, 0.08)";
@@ -1287,11 +1365,13 @@ function drawRearServiceBayBlueprint(ctx, layout) {
   ctx.fill();
   ctx.stroke();
 
-  ctx.fillStyle = "rgba(153, 246, 228, 0.78)";
-  ctx.font = "800 7px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("ASSISTANT", dividerX + (serviceX + serviceW - dividerX) / 2, serviceY - 5);
+  drawBlueprintTag(ctx, "Student\nAssistant", dividerX + (serviceX + serviceW - dividerX) / 2, serviceY - 24, {
+    tone: "teal",
+    size: 5.4,
+    paddingX: 4,
+    paddingY: 2,
+    lineHeight: 5.9
+  });
 
   drawUnifiedStorageBlueprint(ctx, layout);
   ctx.restore();
@@ -1325,15 +1405,13 @@ function drawEntranceAreaBlueprint(ctx, layout) {
     ctx.strokeRect(rackX + 3, oy, 10, 6);
   }
 
-  ctx.fillStyle = "rgba(226, 232, 240, 0.52)";
-  ctx.font = "800 5.5px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.save();
-  ctx.translate(rackX + 8, rackTopY + rackH / 2);
-  ctx.rotate(-Math.PI / 2);
-  ctx.fillText("DATA RACK", 0, 0);
-  ctx.restore();
+  drawBlueprintTag(ctx, "Data\nRack", rackX + 8, rackTopY + 10, {
+    tone: "slate",
+    size: 5.1,
+    paddingX: 3,
+    paddingY: 2,
+    lineHeight: 5.6
+  });
 
   const custodianTable = {
     x: SERVICE_X + 12,
@@ -1347,15 +1425,13 @@ function drawEntranceAreaBlueprint(ctx, layout) {
   ctx.fill();
   ctx.stroke();
 
-  ctx.fillStyle = "rgba(245, 208, 254, 0.82)";
-  ctx.font = "800 6px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.save();
-  ctx.translate(custodianTable.x - 1, custodianTable.y - 28);
-  ctx.rotate(-Math.PI / 2);
-  ctx.fillText("CUSTODIAN", 0, 0);
-  ctx.restore();
+  drawBlueprintTag(ctx, "Custodian\nTable", custodianTable.x + 1, custodianTable.y - 55, {
+    tone: "violet",
+    size: 5.1,
+    paddingX: 3,
+    paddingY: 2,
+    lineHeight: 5.6
+  });
   drawMonitorTile(ctx, custodianTable.x - 9, custodianTable.y - 8, 18, 12);
   drawMonitorTile(ctx, custodianTable.x - 9, custodianTable.y + 20, 18, 12);
 
@@ -1376,6 +1452,14 @@ function drawEntranceAreaBlueprint(ctx, layout) {
   ctx.strokeStyle = "rgba(20, 184, 166, 0.5)";
   ctx.lineWidth = 1;
   ctx.stroke();
+
+  drawBlueprintTag(ctx, "Student\nAssistant", assistCenter.x, assistCenter.y - CELL + 9, {
+    tone: "teal",
+    size: 5.2,
+    paddingX: 4,
+    paddingY: 2,
+    lineHeight: 5.8
+  });
 
   // Student assistant: single monitor
   const monY = visualCenter(assistX, isMod ? 8 : 8).y - 6;
@@ -1418,12 +1502,12 @@ function drawHallwayLabels(ctx, layout) {
   }
 
   // 3. Directional labels in the walkway (centered on cx + 8 to avoid door swings)
-  // Top direction: "fire exit" with a red UP arrow
-  ctx.fillStyle = "#ef4444"; // Red for fire exit direction
-  ctx.font = "800 10.5px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("fire exit", cx + 8, 20);
+  drawBlueprintTag(ctx, "Fire Exit", cx + 8, 20, {
+    tone: "red",
+    size: 6.2,
+    paddingX: 5,
+    paddingY: 2
+  });
   
   ctx.strokeStyle = "#ef4444";
   ctx.lineWidth = 1.8;
@@ -1438,9 +1522,12 @@ function drawHallwayLabels(ctx, layout) {
   ctx.stroke();
 
   // Bottom direction: "entrance" with a DOWN arrow
-  ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
-  ctx.font = "800 10.5px var(--font-sans)";
-  ctx.fillText("entrance", cx + 8, MAP_H - 20);
+  drawBlueprintTag(ctx, "Entrance", cx + 8, MAP_H - 20, {
+    tone: "slate",
+    size: 6.2,
+    paddingX: 5,
+    paddingY: 2
+  });
   
   ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
   ctx.lineWidth = 1.8;
@@ -1458,11 +1545,13 @@ function drawHallwayLabels(ctx, layout) {
   ctx.save();
   ctx.translate(cx - 4, MAP_H / 2);
   ctx.rotate(Math.PI / 2);
-  ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-  ctx.font = "800 11px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("HALLWAY", 0, 0);
+  drawBlueprintTag(ctx, "Hallway", 0, 0, {
+    tone: "slate",
+    size: 6.2,
+    paddingX: 5,
+    paddingY: 2,
+    alpha: 0.72
+  });
   ctx.restore();
 
   ctx.restore();
@@ -1567,6 +1656,7 @@ function drawMap() {
     }
     layout.instructorDesk.forEach(([x, y], idx) => drawInstructorDeskBlueprint(ctx, x, y, idx));
     drawWhiteboard(ctx, layout);
+    drawStudentWorkstationAreaLabel(ctx);
     drawTeacherArea(ctx);
     drawEntranceAreaBlueprint(ctx, layout);
     
