@@ -66,47 +66,6 @@ Deploy from the repository root. No build command or output directory is require
 - Total evacuation time, active agents, evacuation rate chart, incident log, and side-by-side results
 - Average waiting time, average queue length, throughput, exit utilization, and processing time
 
-## Required Presentation Coverage
-
-| Requirement | Evidence in this system |
-| --- | --- |
-| 1. Project introduction | Title, campus/system background, and study importance are shown in the dashboard and summarized here. |
-| 2. Problem definition | The current service/locker zone creates cross-traffic near exit paths, causing door jams and congestion. |
-| 3. Objectives | Minimize evacuation/waiting time, reduce queues, improve exit utilization, and compare scenarios. |
-| 4. System model and design | Agent-based model with entities, events, resources, queues, state variables, and a process flow diagram. |
-| 5. Assumptions/input data | Deterministic seeded timing assumptions stand in for unavailable observed data. |
-| 6. Implementation demo | Browser controls expose event stepping, queue heatmap, time progression, scenario changes, and outputs. |
-| 7. Results/analysis | The comparison table reports total time, average wait, queue length, throughput, utilization, trips, door hits, and heat. |
-| 8. Conclusion/recommendations | The modified layout is evaluated as the recommended improvement when it lowers bottlenecks and incidents. |
-
-### Model Elements
-
-- Entities: 36 students, 1 professor, 2 student assistants, and 2 custodians.
-- Events: pack-up delay, movement, pathfinding, locker retrieval, peer waiting, trip/faint, door jam, extinguisher retrieval, and exit.
-- Resources: front/back exits, hallway/stair paths, service-bay passage, lockers, fire extinguishers, and staff aides.
-- Queues: center-aisle and exit-approach bottlenecks, sampled each second as average queue length.
-- State variables: time, agent position, phase, target, wait time, heatmap counts, evacuation rate, trips, door collisions, and completion state.
-
-### Assumptions and Input Data
-
-Actual observed arrival and service data is unavailable, so the model uses deterministic assumptions to keep scenario comparisons repeatable:
-
-| Input | Assumption |
-| --- | --- |
-| Arrival into motion | Agents begin in the room and activate after behavior-based pack-up delays of 2-12 seconds. |
-| Locker service time | 3 seconds in the modified layout; 10-15 seconds in the current layout. |
-| Extinguisher retrieval | 4 seconds for the professor after reaching the extinguisher. |
-| Trip/faint recovery | 3-18 seconds depending on panic, layout, and assistant proximity. |
-| Door jam duration | 3-5 seconds when unmanaged door pressure causes a blockage. |
-| Movement constraints | Grid-based one-cell movement with slowdown from smoke, crowd density, narrow rows, and panic. |
-| Limitations | Fixed population, fixed floor plan, no continuous physics, and no empirical calibration dataset. |
-
-## Key Files
-
-| File | Purpose |
-| --- | --- |
-| `run.py` | Main entry point to launch the simulation and web server. |
-
 ## Key Files
 
 | File | Purpose |
