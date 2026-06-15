@@ -173,8 +173,9 @@ function makeFallbackState(mode = els.mode.value || "current") {
     fireCells: layout.fireCells,
     speed: Number(els.speed.value || 1.5),
     time: 0,
-    active: agents.length,
+    inside: 0,
     evacuated: 0,
+    casualties: 0,
     totalAgents: agents.length,
     trips: 0,
     doorCollisions: 0,
@@ -1919,8 +1920,9 @@ function drawAgent(ctx, agent) {
 
 function drawMetrics() {
   $("mTime").textContent = `${state.time}s`;
-  $("mInside").textContent = state.active;
+  $("mInside").textContent = state.inside;
   $("mEvacuated").textContent = state.evacuated;
+  $("mCasualties").textContent = state.casualties;
   $("mTrips").textContent = state.trips;
   $("mDoors").textContent = state.doorCollisions;
   $("mHeat").textContent = state.maxHeat;

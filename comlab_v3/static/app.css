@@ -455,8 +455,9 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 /* Colors for specific important metrics */
 #mTime { color: var(--accent-cyan); }
-#mInside { color: var(--accent-emerald); }
+#mInside { color: var(--accent-orange); }
 #mEvacuated { color: var(--accent-emerald); }
+#mCasualties { color: var(--accent-red); }
 #mTrips { color: var(--accent-rose); }
 #mDoors { color: var(--accent-amber); }
 #mHeat { color: var(--accent-orange); }

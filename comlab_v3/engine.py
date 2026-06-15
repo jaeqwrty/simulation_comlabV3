@@ -22,7 +22,7 @@ BACK_EXIT = (8, 11)
 FRONT_STAIRS = (12, 1)
 EMERGENCY_STAIRS = (12, 11)
 CURRENT_LOCKER = (7, 11)
-MODIFIED_LOCKER = (7, 11)
+MODIFIED_LOCKER = (6, 0)
 DATA_RACKS = {(7, y) for y in range(2, 7)}
 STUDENT_ASSISTANT_DESK = {(7, y) for y in range(7, 10)}
 EXTRA_PCS = {(x, 11) for x in range(4)}
@@ -90,6 +90,8 @@ class Agent:
     mobility_factor: float = 1.0
     wait_time: int = 0
     exit_time: int | None = None
+    health: float = 100.0
+    is_casualty: bool = False
 
 
 
@@ -396,7 +398,7 @@ class Simulation:
             self.storage = storage_for(mode)
             self.locker = self.storage
             self.shelves = {self.storage}
-            self.instructor_desk = {(6, 0)}
+            self.instructor_desk = {(0, 11)}
             self.partition_wall = self.data_racks | self.student_assistant_desk
             self.service_bay_passage = (6, 11)
             self.service_bay_staff = self.data_racks | self.student_assistant_desk | {self.service_bay_passage}
@@ -438,13 +440,21 @@ class Simulation:
             | HALLWAY_WALL | self.partition_wall
             | {self.fire_origin}
         )
-        
+        if self.fire_origin_name == "data":
+            if self.mode == "modified":
+                self.active_fire_cells = {(1, 11)}
+                self.fire_intensity = {(1, 11): 50.0}
+            else:
+                self.active_fire_cells = {self.fire_origin}
+                self.fire_intensity = {self.fire_origin: 50.0}
+        else:
+            self.active_fire_cells = {self.fire_origin}
+            self.fire_intensity = {self.fire_origin: 50.0}
         self.time = 0
         self.trips = 0
         self.door_collisions = 0
         self.fire_damage = 0
         self.suppression_level = 0
-        self.active_fire_cells: set[tuple[int, int]] = {self.fire_origin}
         self.door_cooldown = {"front": 0, "back": 0}
         self.heatmap: dict[str, int] = {}
         self.queue_lengths: list[int] = []
@@ -487,12 +497,12 @@ class Simulation:
         if not self.active_fire_cells:
             return
 
-        spread_interval = 7 if self.mode == "current" else 9
+        spread_interval = 7
         if self.time % spread_interval != 0:
             return
 
         suppression = min(0.80, self.suppression_level * 0.25)
-        max_cells = 16 if self.mode == "current" else 12
+        max_cells = 16
         if len(self.active_fire_cells) >= max_cells:
             return
 
@@ -509,7 +519,7 @@ class Simulation:
                 congestion = min(0.20, density.get(candidate, 0) * 0.04)
                 heat = min(0.18, self.heatmap.get(cell_key(candidate), 0) / 360)
                 wiring_bonus = 0.08 if candidate in self.workstations_set | self.data_racks | self.extra_pcs else 0.0
-                base = 0.010 if self.mode == "modified" else 0.016
+                base = 0.016
                 chance = (base * fuel + congestion + heat + wiring_bonus) * (1 - suppression)
                 if self.panic:
                     chance += 0.006
@@ -656,8 +666,8 @@ class Simulation:
                     Agent("I01", "instructor", "instructor", 6, 0, 101, wait_until=1, target=(6, 0), phase="waiting"),
                     Agent("PA1", "assistant", "assistant", 3, 11, 102, wait_until=1, target=(3, 11), phase="waiting", assigned_exit="front"),
                     Agent("PA2", "assistant", "assistant", 4, 11, 103, wait_until=1, target=(4, 11), phase="waiting", assigned_exit="back"),
-                    Agent("LC1", "custodian", "custodian", 0, 11, 104, wait_until=1, target=(0, 11), phase="waiting", assigned_exit="front"),
-                    Agent("LC2", "custodian", "custodian", 2, 11, 105, wait_until=1, target=(2, 11), phase="waiting", assigned_exit="back"),
+                    Agent("LC1", "custodian", "custodian", 0, 10, 104, wait_until=1, target=(0, 10), phase="waiting", assigned_exit="front"),
+                    Agent("LC2", "custodian", "custodian", 2, 10, 105, wait_until=1, target=(2, 10), phase="waiting", assigned_exit="back"),
                 ]
             )
         else:
@@ -919,7 +929,34 @@ class Simulation:
         self.fire_damage += max(0, 2 + len(self.active_fire_cells) - suppressors * 3)
 
         for agent in self.agents:
-            if agent.exited:
+            if agent.exited or agent.is_casualty:
+                continue
+
+            dist_to_fire = self.distance_to_fire((agent.x, agent.y))
+            
+            # Fire starts weak and grows stronger over time and as it spreads
+            intensity = min(1.0, (len(self.active_fire_cells) / 4.0) + (self.time / 60.0))
+
+            # Agents behind the partition wall are shielded from direct radiant heat
+            # unless the fire has breached the service bay itself.
+            is_shielded = (agent.x, agent.y) in self.service_bay_staff and not any(f in self.service_bay_staff for f in self.active_fire_cells)
+
+            if is_shielded:
+                if dist_to_fire <= 1:
+                    agent.health -= (2.0 * intensity)
+                elif dist_to_fire == 2:
+                    agent.health -= (1.0 * intensity)
+            else:
+                if dist_to_fire <= 1:
+                    agent.health -= (15.0 * intensity)
+                elif dist_to_fire == 2:
+                    agent.health -= (5.0 * intensity)
+                elif dist_to_fire == 3:
+                    agent.health -= (2.0 * intensity)
+                
+            if agent.health <= 0:
+                agent.is_casualty = True
+                self.add_event("casualty", f"{agent.agent_id} succumbed to smoke/fire and became a casualty")
                 continue
 
             if agent.kind in ("student", "assistant") and (agent.y == 0 or agent.y >= 10):
@@ -1238,6 +1275,7 @@ class Simulation:
     def summary(self) -> dict[str, int | float]:
         total_agents = len(self.agents)
         evacuated = sum(1 for agent in self.agents if agent.exited)
+        casualties = sum(1 for agent in self.agents if getattr(agent, 'is_casualty', False))
         average_wait = (
             sum(agent.wait_time for agent in self.agents) / total_agents
             if total_agents
@@ -1253,6 +1291,7 @@ class Simulation:
         return {
             "time": self.time,
             "evacuated": evacuated,
+            "casualties": casualties,
             "trips": self.trips,
             "door_collisions": self.door_collisions,
             "max_heat": max(self.heatmap.values(), default=0),
