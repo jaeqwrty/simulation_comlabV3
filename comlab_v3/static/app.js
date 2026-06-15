@@ -89,13 +89,20 @@ window.addEventListener("error", (event) => {
 function layoutFor(mode = "current", fireOrigin = "data") {
   const modified = mode === "modified";
   const workstations = [];
-  const rows = [1, 2, 4, 5, 7, 8];
-  const cols = modified ? [1, 2, 3, 5, 6, 7] : [0, 1, 2, 4, 5, 6];
-  rows.forEach((y) => cols.forEach((x) => workstations.push([x, y])));
+  const rows = modified ? [1, 2, 4, 5, 7] : [1, 2, 4, 5, 7, 8];
+  if (modified) {
+    [1, 2, 4, 5].forEach((y) => {
+      [0, 1, 2, 3, 4, 5, 6, 7].forEach((x) => workstations.push([x, y]));
+    });
+    [0, 1, 2, 3].forEach((x) => workstations.push([x, 7]));
+  } else {
+    const cols = [0, 1, 2, 4, 5, 6];
+    rows.forEach((y) => cols.forEach((x) => workstations.push([x, y])));
+  }
 
-  const storage = modified ? [1, 11] : [7, 11];
+  const storage = modified ? [7, 11] : [7, 11];
   const fireOrigins = modified
-    ? { data: [0, 7], desk: [6, 0], workstation: [3, 5], locker: storage, shelves: storage, assistant: [0, 8] }
+    ? { data: [1, 11], desk: [6, 0], workstation: [2, 5], locker: storage, shelves: storage, assistant: [4, 11] }
     : { data: [7, 4], desk: [6, 0], workstation: [2, 5], locker: storage, shelves: storage, assistant: [7, 8] };
 
   return {
@@ -106,15 +113,15 @@ function layoutFor(mode = "current", fireOrigin = "data") {
     workstations,
     workstationRows: rows,
     instructorDesk: [[6, 0]],
-    dataRacks: modified ? [[0, 6], [0, 7]] : [[7, 2], [7, 3], [7, 4], [7, 5], [7, 6]],
-    studentAssistantDesk: modified ? [[0, 8], [0, 9]] : [[7, 7], [7, 8], [7, 9]],
+    dataRacks: modified ? [[0, 11], [1, 11], [2, 11]] : [[7, 2], [7, 3], [7, 4], [7, 5], [7, 6]],
+    studentAssistantDesk: modified ? [[3, 11], [4, 11], [5, 11]] : [[7, 7], [7, 8], [7, 9]],
     extraPcs: modified ? [] : [[0, 11], [1, 11], [2, 11], [3, 11]],
     shelves: [storage],
     storage,
     frontExit: [8, 0],
     backExit: [8, 11],
-    frontStairs: [12, 1],
-    emergencyStairs: [12, 11],
+    frontStairs: null,
+    emergencyStairs: null,
     locker: storage,
     fireOrigin: fireOrigins[fireOrigin] || fireOrigins.data,
     fireCells: [fireOrigins[fireOrigin] || fireOrigins.data],
@@ -127,14 +134,14 @@ function layoutFor(mode = "current", fireOrigin = "data") {
     },
     cell: CELL,
     hallwayWall: Array.from({ length: 12 }, (_, y) => [8, y]).filter(([x, y]) => !(x === 8 && (y === 0 || y === 11))),
-    partitionWall: modified ? [[0, 6], [0, 7], [0, 8], [0, 9]] : [[7, 2], [7, 3], [7, 4], [7, 5], [7, 6], [7, 7], [7, 8], [7, 9]],
-    serviceBayPassage: modified ? [0, 10] : [7, 10],
+    partitionWall: modified ? [[0, 11], [1, 11], [2, 11], [3, 11], [4, 11], [5, 11]] : [[7, 2], [7, 3], [7, 4], [7, 5], [7, 6], [7, 7], [7, 8], [7, 9]],
+    serviceBayPassage: modified ? [6, 11] : [7, 10],
     extinguisherExit: modified ? [4, 0] : [7, 0],
     extinguisherEntrance: null,
     extinguisherProfessor: modified ? [4, 0] : [7, 0],
-    extinguisherAssistant: modified ? [1, 10] : [6, 9],
-    extinguisherShelves: modified ? [2, 11] : [6, 11],
-    fireExtinguishers: modified ? [[4, 0], [1, 10], [2, 11]] : [[7, 0], [6, 9], [6, 11]]
+    extinguisherAssistant: modified ? [6, 10] : [6, 9],
+    extinguisherShelves: modified ? [7, 10] : [6, 11],
+    fireExtinguishers: modified ? [[4, 0], [6, 10], [7, 10]] : [[7, 0], [6, 9], [6, 11]]
   };
 }
 
@@ -181,14 +188,10 @@ function makeFallbackState(mode = els.mode.value || "current") {
 function visualCenter(x, y) {
   if (state && state.mode === "modified") {
     let cx;
-    if (x === 0) {
-      cx = 32; // Center of left service bay
-    } else if (x === 4) {
-      cx = 196; // Central Aisle
-    } else if (x === 1 || x === 2 || x === 3) {
-      cx = x === 1 ? 76 : x === 2 ? 116 : 156; // Left Workstations (3 in table)
-    } else if (x === 5 || x === 6 || x === 7) {
-      cx = x === 5 ? 236 : x === 6 ? 276 : 316; // Right Workstations (3 in table)
+    if (x >= 0 && x <= 3) {
+      cx = 38 + x * 36;
+    } else if (x >= 4 && x <= 7) {
+      cx = 218 + (x - 4) * 36;
     } else if (x === 8) {
       cx = EXIT_X;
     } else if (x >= 9) {
@@ -197,7 +200,7 @@ function visualCenter(x, y) {
     } else {
       cx = x * CELL + CELL / 2;
     }
-    const usesWorkstationLane = (x >= 1 && x <= 7);
+    const usesWorkstationLane = (x >= 0 && x <= 7) && y <= 8;
     return {
       x: cx,
       y: (usesWorkstationLane ? WORKSTATION_ROW_Y.get(y) : undefined)
@@ -411,7 +414,7 @@ function syncFromState() {
   els.layoutTitle.textContent = state.mode === "current" ? "Current Layout" : "Modified Layout";
   els.layoutNote.textContent = state.mode === "current"
     ? "Locker near the Entrance door creates cross-traffic with evacuating agents."
-    : "Safer layout: 3-computer student tables, back-left staff service zone, unified bag/shelf storage, clear center aisle, and reachable extinguishers.";
+    : "Safer layout: 36 student workstations, rear staff service zone, unified bag/shelf storage, clear center aisle, and reachable extinguishers.";
 }
 
 function triggerDraw() {
@@ -518,6 +521,89 @@ function drawMonitorTile(ctx, x, y, w, h) {
   // small bright strip
   ctx.fillStyle = "rgba(56,189,248,0.18)";
   ctx.fillRect(sx + sw * 0.25, sy + sh + 1, sw * 0.5, 2);
+}
+
+function drawRearFacingMonitorTile(ctx, cx, cy) {
+  drawMonitorTile(ctx, cx - 11, cy - 3, 22, 13);
+
+  ctx.save();
+  ctx.fillStyle = "rgba(148,163,184,0.24)";
+  ctx.fillRect(cx - 7, cy + 12, 14, 3);
+  ctx.fillStyle = "rgba(226,232,240,0.22)";
+  ctx.fillRect(cx - 10, cy + 17, 20, 4);
+  ctx.restore();
+}
+
+function drawBlueprintTag(ctx, label, x, y, options = {}) {
+  const {
+    tone = "blue",
+    align = "center",
+    size = 6.5,
+    paddingX = 5,
+    paddingY = 3,
+    lineHeight = size + 2,
+    alpha = 0.9
+  } = options;
+  const palette = {
+    blue: ["rgba(15, 23, 42, 0.82)", "rgba(96, 165, 250, 0.42)", "rgba(191, 219, 254, 0.92)"],
+    teal: ["rgba(6, 78, 59, 0.58)", "rgba(45, 212, 191, 0.42)", "rgba(153, 246, 228, 0.94)"],
+    amber: ["rgba(120, 53, 15, 0.58)", "rgba(251, 191, 36, 0.50)", "rgba(254, 243, 199, 0.95)"],
+    red: ["rgba(127, 29, 29, 0.58)", "rgba(248, 113, 113, 0.48)", "rgba(254, 202, 202, 0.95)"],
+    violet: ["rgba(88, 28, 135, 0.52)", "rgba(217, 70, 239, 0.44)", "rgba(245, 208, 254, 0.95)"],
+    slate: ["rgba(15, 23, 42, 0.74)", "rgba(148, 163, 184, 0.35)", "rgba(226, 232, 240, 0.86)"]
+  }[tone] || ["rgba(15, 23, 42, 0.80)", "rgba(148, 163, 184, 0.38)", "rgba(226, 232, 240, 0.90)"];
+  const lines = String(label).toUpperCase().split("\n");
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = `800 ${size}px var(--font-sans)`;
+  const textW = Math.max(...lines.map((line) => ctx.measureText(line).width));
+  const w = textW + paddingX * 2;
+  const h = lines.length * lineHeight + paddingY * 2 - 1;
+  let left = x - w / 2;
+  if (align === "left") left = x;
+  if (align === "right") left = x - w;
+  const top = y - h / 2;
+
+  ctx.fillStyle = palette[0];
+  ctx.strokeStyle = palette[1];
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.roundRect(left, top, w, h, 3);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = palette[2];
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  lines.forEach((line, index) => {
+    const ty = top + paddingY + lineHeight / 2 + index * lineHeight;
+    ctx.fillText(line, left + w / 2, ty);
+  });
+  ctx.restore();
+}
+
+function drawCurrentRearExtraPcArea(ctx, layout) {
+  if (!layout.extraPcs || !layout.extraPcs.length) return;
+
+  ctx.save();
+  const centers = layout.extraPcs.map(([x, y]) => visualCenter(x, y));
+  const left = Math.min(...centers.map((pos) => pos.x)) - 23;
+  const right = Math.max(...centers.map((pos) => pos.x)) + 23;
+  const centerY = centers[0].y;
+
+  ctx.strokeStyle = "rgba(96, 165, 250, 0.58)";
+  ctx.lineWidth = 3.4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(left, centerY + 3);
+  ctx.lineTo(right, centerY + 3);
+  ctx.stroke();
+
+  drawBlueprintTag(ctx, "Extra PCs", (left + right) / 2, centerY - 18, { tone: "blue", size: 6.5 });
+
+  centers.forEach((pos) => drawRearFacingMonitorTile(ctx, pos.x, pos.y + 1));
+  ctx.restore();
 }
 
 // Draw a single large data rack spanning multiple rows (cell-based positioning)
@@ -643,6 +729,13 @@ function drawWhiteboard(ctx, layout) {
   ctx.fillStyle = "rgba(148,163,184,0.12)";
   ctx.fillRect(tvX + tvW / 2 - 6, tvY + tvH + 3, 12, 3);
 
+  drawBlueprintTag(ctx, "White Board", wbX + 34, wbY + wbH / 2, {
+    tone: "slate",
+    size: 5.4,
+    paddingX: 4,
+    paddingY: 2
+  });
+
   ctx.restore();
 }
 
@@ -683,41 +776,36 @@ function drawUnifiedStorageBlueprint(ctx, layout) {
   const label = "BAGS & SHELVES";
 
   if (isMod) {
-    const left = visualCenter(storage[0], storage[1]);
-    const right = visualCenter(storage[0] + 1, storage[1]);
-    const x = left.x - CELL / 2 + 4;
-    const y = left.y - CELL / 2 + 4;
-    const w = right.x + CELL / 2 - left.x - 8;
-    const h = CELL - 8;
+    const w = 16;
+    const h = 58;
+    const x = LAB_RIGHT - w - 16;
+    const y = MAP_H - h - 56;
 
     ctx.save();
-    ctx.fillStyle = "rgba(245, 158, 11, 0.10)";
-    ctx.strokeStyle = "rgba(251, 191, 36, 0.68)";
+    ctx.fillStyle = "rgba(245, 158, 11, 0.07)";
+    ctx.strokeStyle = "rgba(251, 191, 36, 0.58)";
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 4);
+    ctx.roundRect(x, y, w, h, 3);
     ctx.fill();
     ctx.stroke();
 
     ctx.strokeStyle = "rgba(203, 213, 225, 0.32)";
-    for (let offset = 10; offset <= h - 8; offset += 5) {
+    for (let offset = 9; offset <= h - 8; offset += 8) {
       ctx.beginPath();
-      ctx.moveTo(x + 6, y + offset);
-      ctx.lineTo(x + w - 6, y + offset);
+      ctx.moveTo(x + 3, y + offset);
+      ctx.lineTo(x + w - 3, y + offset);
       ctx.stroke();
     }
 
-    ctx.strokeStyle = "rgba(245, 158, 11, 0.30)";
-    ctx.beginPath();
-    ctx.moveTo(x + w / 2, y + 6);
-    ctx.lineTo(x + w / 2, y + h - 6);
-    ctx.stroke();
-
-    ctx.fillStyle = "rgba(254, 243, 199, 0.94)";
-    ctx.font = "800 7px var(--font-sans)";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, x + w / 2, y + h / 2);
+    drawBlueprintTag(ctx, "Bags\nShelves", x - 6, y + h / 2, {
+      tone: "amber",
+      size: 5.5,
+      paddingX: 3,
+      paddingY: 2,
+      lineHeight: 6,
+      align: "right"
+    });
     ctx.restore();
     return;
   }
@@ -774,16 +862,21 @@ function drawStorageBlueprint(ctx, pos, label, tone = "amber") {
     ctx.stroke();
   }
 
-  ctx.fillStyle = text;
-  ctx.font = isCombined ? "800 6.5px var(--font-sans)" : "800 7.5px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const lines = String(label).split("\n");
-  const lineHeight = isCombined ? 7 : 0;
-  const startY = py + CELL / 2 - ((lines.length - 1) * lineHeight) / 2;
-  lines.forEach((line, index) => {
-    ctx.fillText(line, px + CELL / 2, startY + index * lineHeight);
-  });
+  if (isCombined) {
+    drawBlueprintTag(ctx, "Bags\nShelves", px + CELL / 2, py - 1, {
+      tone: "amber",
+      size: 5.2,
+      paddingX: 3,
+      paddingY: 2,
+      lineHeight: 5.8
+    });
+  } else {
+    ctx.fillStyle = text;
+    ctx.font = "800 7.5px var(--font-sans)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(label).toUpperCase(), px + CELL / 2, py + CELL / 2);
+  }
   ctx.restore();
 }
 
@@ -933,6 +1026,12 @@ function drawPartitionWall(ctx, layout) {
   ctx.setLineDash([5, 3]);
 
   const isMod = state && state.mode === "modified";
+  if (isMod) {
+    ctx.setLineDash([]);
+    ctx.restore();
+    return;
+  }
+
   const wallX = isMod ? 58 : SERVICE_X + 2;
   const col = isMod ? 0 : 7;
 
@@ -953,8 +1052,13 @@ function drawServiceBaySketchPath(ctx, layout) {
   ctx.save();
 
   const isMod = state && state.mode === "modified";
-  const passage = layout.serviceBayPassage || (isMod ? [0, 10] : [7, 10]);
+  const passage = layout.serviceBayPassage || (isMod ? [6, 10] : [7, 10]);
   const passageCenter = visualCenter(passage[0], passage[1]);
+  if (isMod) {
+    ctx.restore();
+    return;
+  }
+
   const rackMid = visualCenter(passage[0], isMod ? 6.5 : 4);
   const assistantMid = visualCenter(passage[0], isMod ? 8.5 : 8);
   const rackBottom = visualCenter(passage[0], isMod ? 7 : 6);
@@ -982,11 +1086,12 @@ function drawServiceBaySketchPath(ctx, layout) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  ctx.fillStyle = "rgba(16, 185, 129, 0.9)";
-  ctx.font = "700 8px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("PASSAGE", passageCenter.x, passageCenter.y);
+  drawBlueprintTag(ctx, "Passage", passageCenter.x, passageCenter.y + 2, {
+    tone: "teal",
+    size: 5.8,
+    paddingX: 4,
+    paddingY: 2
+  });
 
   ctx.restore();
 }
@@ -1000,23 +1105,23 @@ function drawFireExtinguisherBlueprint(ctx, pos) {
 
   if (isMod) {
     if (pos[0] === 4 && pos[1] === 0) iconX = cx - 14;
-    if (pos[0] === 1 && pos[1] === 10) {
-      iconX = cx - 13;
-      iconY = cy - 7;
+    if (pos[0] === 6 && pos[1] === 10) {
+      iconX = cx + 18;
+      iconY = cy - 8;
     }
-    if (pos[0] === 2 && pos[1] === 11) {
-      iconX = cx + 11;
-      iconY = cy - 5;
+    if (pos[0] === 7 && pos[1] === 10) {
+      iconX = cx + 12;
+      iconY = cy + 10;
     }
   }
 
   ctx.save();
 
-  ctx.fillStyle = "rgba(248, 113, 113, 0.10)";
-  ctx.strokeStyle = "rgba(248, 113, 113, 0.55)";
+  ctx.fillStyle = isMod ? "rgba(248, 113, 113, 0.06)" : "rgba(248, 113, 113, 0.10)";
+  ctx.strokeStyle = isMod ? "rgba(248, 113, 113, 0.40)" : "rgba(248, 113, 113, 0.55)";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(iconX, iconY, 10, 0, Math.PI * 2);
+  ctx.arc(iconX, iconY, isMod ? 8 : 10, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
@@ -1025,18 +1130,18 @@ function drawFireExtinguisherBlueprint(ctx, pos) {
   ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = 1.2;
   ctx.beginPath();
-  ctx.roundRect(iconX - 3, iconY - 6, 6, 12, 1.5);
+  ctx.roundRect(iconX - 2.5, iconY - 5, 5, 10, 1.5);
   ctx.fill();
   ctx.stroke();
   
   // Extinguisher black nozzle head
   ctx.fillStyle = "#475569";
   ctx.beginPath();
-  ctx.rect(iconX - 4, iconY - 8, 8, 2);
+  ctx.rect(iconX - 3.5, iconY - 7, 7, 2);
   ctx.fill();
 
   ctx.fillStyle = "#fff";
-  ctx.font = "800 5.5px var(--font-sans)";
+  ctx.font = "800 5px var(--font-sans)";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText("FE", iconX, iconY + 1);
@@ -1044,41 +1149,18 @@ function drawFireExtinguisherBlueprint(ctx, pos) {
   ctx.restore();
 }
 
-function drawClearEgressLanes(ctx, layout) {
-  if (!(state && state.mode === "modified")) return;
-
-  ctx.save();
-  ctx.fillStyle = "rgba(16, 185, 129, 0.06)";
-  ctx.strokeStyle = "rgba(16, 185, 129, 0.22)";
-  ctx.lineWidth = 1;
-  ctx.setLineDash([7, 5]);
-
-  const centerX = visualCenter(4, 5).x;
-  ctx.beginPath();
-  ctx.roundRect(centerX - 16, CELL * 0.9, 32, CELL * 10.3, 8);
-  ctx.fill();
-  ctx.stroke();
-
-  const passage = visualCenter((layout.serviceBayPassage || [0, 10])[0], (layout.serviceBayPassage || [0, 10])[1]);
-  ctx.beginPath();
-  ctx.roundRect(passage.x - 18, passage.y - 16, centerX - passage.x + 34, 32, 8);
-  ctx.fill();
-  ctx.stroke();
-
-  const storage = visualCenter(1, 11);
-  const rear = visualCenter(7, 11);
-  ctx.beginPath();
-  ctx.roundRect(storage.x - 18, storage.y - 16, centerX - storage.x + 34, 32, 8);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.roundRect(centerX - 16, rear.y - 16, rear.x - centerX + 34, 32, 8);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.setLineDash([]);
-  ctx.restore();
+function drawStudentWorkstationAreaLabel(ctx) {
+  const isMod = state && state.mode === "modified";
+  const x = isMod ? LAB_RIGHT / 2 : 122;
+  const y = isMod ? 49 : 49;
+  drawBlueprintTag(ctx, isMod ? "Student Workstations\n36 PCs" : "Student Workstations", x, y, {
+    tone: "blue",
+    size: 5.8,
+    paddingX: 5,
+    paddingY: 2,
+    lineHeight: 6.4,
+    alpha: 0.82
+  });
 }
 
 function drawLabeledBlock(ctx, x, y, w, h, label, fill, stroke, align = "center") {
@@ -1099,7 +1181,7 @@ function drawLabeledBlock(ctx, x, y, w, h, label, fill, stroke, align = "center"
 
   const lines = label.split("\n");
   const spacing = isVertical ? 9 : 10;
-  
+
   let startY;
   if (align === "top") {
     startY = y + 14;
@@ -1108,7 +1190,7 @@ function drawLabeledBlock(ctx, x, y, w, h, label, fill, stroke, align = "center"
   } else {
     startY = y + h / 2 - (lines.length - 1) * (spacing / 2);
   }
-  
+
   lines.forEach((line, index) => {
     ctx.fillText(line, x + w / 2, startY + index * spacing);
   });
@@ -1129,11 +1211,12 @@ function drawTeacherArea(ctx) {
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "rgba(191, 219, 254, 0.9)";
-    ctx.font = "800 8px var(--font-sans)";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("PROFESSOR", teacher.x, teacher.y - 10);
+    drawBlueprintTag(ctx, "Professor", teacher.x, teacher.y - 10, {
+      tone: "blue",
+      size: 5.5,
+      paddingX: 4,
+      paddingY: 2
+    });
   } else {
     ctx.fillStyle = "rgba(59, 130, 246, 0.16)";
     ctx.strokeStyle = "rgba(59, 130, 246, 0.55)";
@@ -1143,11 +1226,13 @@ function drawTeacherArea(ctx) {
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "rgba(191, 219, 254, 0.9)";
-    ctx.font = "800 8px var(--font-sans)";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("PROFESSOR", teacher.x - 59, teacher.y);
+    drawBlueprintTag(ctx, "Professor", teacher.x - 64, teacher.y - 9, {
+      tone: "blue",
+      size: 5.5,
+      paddingX: 4,
+      paddingY: 2
+    });
+    drawMonitorTile(ctx, teacher.x - 76, teacher.y - 2, 24, 13);
   }
   ctx.restore();
 }
@@ -1161,15 +1246,23 @@ function drawWorkstationBenches(ctx, layout) {
   if (state && state.mode === "modified") {
     layout.workstationRows.forEach((row) => {
       const y = visualCenter(0, row).y;
-      ctx.beginPath();
-      ctx.moveTo(56, y);
-      ctx.lineTo(176, y);
-      ctx.stroke();
+      const rowCells = layout.workstations.filter(([, cellY]) => cellY === row);
+      const hasLeftTable = rowCells.some(([x]) => x >= 0 && x <= 3);
+      const hasRightTable = rowCells.some(([x]) => x >= 4 && x <= 7);
 
-      ctx.beginPath();
-      ctx.moveTo(216, y);
-      ctx.lineTo(336, y);
-      ctx.stroke();
+      if (hasLeftTable) {
+        ctx.beginPath();
+        ctx.moveTo(20, y);
+        ctx.lineTo(164, y);
+        ctx.stroke();
+      }
+
+      if (hasRightTable) {
+        ctx.beginPath();
+        ctx.moveTo(200, y);
+        ctx.lineTo(344, y);
+        ctx.stroke();
+      }
     });
   } else {
     layout.workstationRows.forEach((row) => {
@@ -1189,16 +1282,128 @@ function drawWorkstationBenches(ctx, layout) {
   ctx.restore();
 }
 
+function drawRearServiceBayBlueprint(ctx, layout) {
+  ctx.save();
+
+  const serviceLeft = visualCenter(0, 11);
+  const serviceRight = visualCenter(5, 11);
+  const serviceX = serviceLeft.x - CELL / 2 + 4;
+  const serviceY = MAP_H - 60;
+  const serviceW = serviceRight.x + CELL / 2 - serviceX - 4;
+  const serviceH = 56;
+  const dividerX = (visualCenter(2, 11).x + visualCenter(3, 11).x) / 2;
+
+  ctx.fillStyle = "rgba(249, 115, 22, 0.10)";
+  ctx.strokeStyle = "rgba(249, 115, 22, 0.62)";
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.roundRect(serviceX, serviceY, serviceW, serviceH, 5);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(249, 115, 22, 0.13)";
+  ctx.beginPath();
+  ctx.roundRect(serviceX + 1, serviceY + 1, dividerX - serviceX - 2, serviceH - 2, 4);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(20, 184, 166, 0.12)";
+  ctx.beginPath();
+  ctx.roundRect(dividerX, serviceY + 1, serviceX + serviceW - dividerX - 1, serviceH - 2, 4);
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.32)";
+  ctx.beginPath();
+  ctx.moveTo(dividerX, serviceY + 5);
+  ctx.lineTo(dividerX, serviceY + serviceH - 5);
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(254, 215, 170, 0.24)";
+  for (let x = serviceX + 14; x < dividerX - 8; x += 12) {
+    ctx.beginPath();
+    ctx.moveTo(x, serviceY + 26);
+    ctx.lineTo(x + 7, serviceY + 26);
+    ctx.moveTo(x, serviceY + 32);
+    ctx.lineTo(x + 7, serviceY + 32);
+    ctx.stroke();
+  }
+
+  drawBlueprintTag(ctx, "Custodian\nData Rack", serviceX + (dividerX - serviceX) / 2, serviceY + 13, {
+    tone: "amber",
+    size: 5.4,
+    paddingX: 4,
+    paddingY: 2,
+    lineHeight: 5.9
+  });
+
+  drawBlueprintTag(ctx, "Student\nAssistant", dividerX + (serviceX + serviceW - dividerX) / 2, serviceY + 13, {
+    tone: "teal",
+    size: 5.4,
+    paddingX: 4,
+    paddingY: 2,
+    lineHeight: 5.9
+  });
+
+  drawUnifiedStorageBlueprint(ctx, layout);
+  ctx.restore();
+}
+
 function drawEntranceAreaBlueprint(ctx, layout) {
   ctx.save();
 
   const isMod = state && state.mode === "modified";
-  
-  // Draw a vertical stack of server racks in the custodian/data rack area
-  const rackCol = isMod ? 0 : 7;
-  const rackTop = isMod ? 6 : 2;
-  const rackRows = isMod ? 2 : 4;
-  drawBigDataRack(ctx, rackCol, rackTop, rackRows);
+  if (isMod) {
+    drawRearServiceBayBlueprint(ctx, layout);
+    ctx.restore();
+    return;
+  }
+
+  // Current sketch basis: data rack at the right, custodian table beside it.
+  const rackCol = 7;
+  const rackTopY = visualCenter(rackCol, 2).y - CELL / 2 + 7;
+  const rackX = SERVICE_X + SERVICE_W - 20;
+  const rackH = CELL * 2.15;
+  ctx.fillStyle = "rgba(20,20,28,0.96)";
+  ctx.strokeStyle = "rgba(71,85,105,0.65)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(rackX, rackTopY, 16, rackH, 3);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(255,255,255,0.05)";
+  for (let oy = rackTopY + 8; oy < rackTopY + rackH - 8; oy += 10) {
+    ctx.strokeRect(rackX + 3, oy, 10, 6);
+  }
+
+  drawBlueprintTag(ctx, "Data\nRack", rackX + 8, rackTopY + 10, {
+    tone: "slate",
+    size: 5.1,
+    paddingX: 3,
+    paddingY: 2,
+    lineHeight: 5.6
+  });
+
+  const custodianTable = {
+    x: SERVICE_X + 12,
+    y: visualCenter(rackCol, 4).y + 5
+  };
+  ctx.fillStyle = "rgba(217, 70, 239, 0.08)";
+  ctx.strokeStyle = "rgba(217, 70, 239, 0.45)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(custodianTable.x - 11, custodianTable.y - 45, 24, 96, 5);
+  ctx.fill();
+  ctx.stroke();
+
+  drawBlueprintTag(ctx, "Custodian\nTable", custodianTable.x + 1, custodianTable.y - 55, {
+    tone: "violet",
+    size: 5.1,
+    paddingX: 3,
+    paddingY: 2,
+    lineHeight: 5.6
+  });
+  drawMonitorTile(ctx, custodianTable.x - 9, custodianTable.y - 8, 18, 12);
+  drawMonitorTile(ctx, custodianTable.x - 9, custodianTable.y + 20, 18, 12);
 
   // Student assistant bay: small desk with two monitor icons
   const assistX = rackCol;
@@ -1218,15 +1423,18 @@ function drawEntranceAreaBlueprint(ctx, layout) {
   ctx.lineWidth = 1;
   ctx.stroke();
 
+  drawBlueprintTag(ctx, "Student\nAssistant", assistCenter.x, assistCenter.y - CELL + 9, {
+    tone: "teal",
+    size: 5.2,
+    paddingX: 4,
+    paddingY: 2,
+    lineHeight: 5.8
+  });
+
   // Student assistant: single monitor
   const monY = visualCenter(assistX, isMod ? 8 : 8).y - 6;
   const mx = assistCenter.x;
   drawMonitorTile(ctx, mx - 10, monY - 6, 20, 12);
-
-  // Custodian area: two monitors (placed above the data rack)
-  const custodianTop = visualCenter(rackCol, isMod ? 7 : 3);
-  drawMonitorTile(ctx, custodianTop.x - 24, custodianTop.y - 6, 20, 12);
-  drawMonitorTile(ctx, custodianTop.x + 6, custodianTop.y - 6, 20, 12);
 
   drawUnifiedStorageBlueprint(ctx, layout);
 
@@ -1264,12 +1472,12 @@ function drawHallwayLabels(ctx, layout) {
   }
 
   // 3. Directional labels in the walkway (centered on cx + 8 to avoid door swings)
-  // Top direction: "fire exit" with a red UP arrow
-  ctx.fillStyle = "#ef4444"; // Red for fire exit direction
-  ctx.font = "800 10.5px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("fire exit", cx + 8, 20);
+  drawBlueprintTag(ctx, "Fire Exit", cx + 8, 20, {
+    tone: "red",
+    size: 6.2,
+    paddingX: 5,
+    paddingY: 2
+  });
   
   ctx.strokeStyle = "#ef4444";
   ctx.lineWidth = 1.8;
@@ -1283,32 +1491,17 @@ function drawHallwayLabels(ctx, layout) {
   ctx.lineTo(cx + 12, 36);
   ctx.stroke();
 
-  // Bottom direction: "entrance" with a DOWN arrow
-  ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
-  ctx.font = "800 10.5px var(--font-sans)";
-  ctx.fillText("entrance", cx + 8, MAP_H - 20);
-  
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
-  ctx.lineWidth = 1.8;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.beginPath();
-  ctx.moveTo(cx + 8, MAP_H - 48);
-  ctx.lineTo(cx + 8, MAP_H - 32);
-  ctx.lineTo(cx + 4, MAP_H - 36);
-  ctx.moveTo(cx + 8, MAP_H - 32);
-  ctx.lineTo(cx + 12, MAP_H - 36);
-  ctx.stroke();
-
   // 4. Vertical label: "HALLWAY" (centered in the middle of the hallway)
   ctx.save();
   ctx.translate(cx - 4, MAP_H / 2);
   ctx.rotate(Math.PI / 2);
-  ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-  ctx.font = "800 11px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("HALLWAY", 0, 0);
+  drawBlueprintTag(ctx, "Hallway", 0, 0, {
+    tone: "slate",
+    size: 6.2,
+    paddingX: 5,
+    paddingY: 2,
+    alpha: 0.72
+  });
   ctx.restore();
 
   ctx.restore();
@@ -1363,17 +1556,26 @@ function drawMap() {
 
     ctx.strokeStyle = "rgba(56, 189, 248, 0.1)";
     ctx.lineWidth = 1;
-    for (const y of layout.workstationRows.map((row) => visualCenter(0, row).y)) {
+    for (const row of layout.workstationRows) {
+      const y = visualCenter(0, row).y;
       if (state && state.mode === "modified") {
-        ctx.beginPath();
-        ctx.moveTo(50, y);
-        ctx.lineTo(182, y);
-        ctx.stroke();
+        const rowCells = layout.workstations.filter(([, cellY]) => cellY === row);
+        const hasLeftTable = rowCells.some(([x]) => x >= 0 && x <= 3);
+        const hasRightTable = rowCells.some(([x]) => x >= 4 && x <= 7);
 
-        ctx.beginPath();
-        ctx.moveTo(210, y);
-        ctx.lineTo(342, y);
-        ctx.stroke();
+        if (hasLeftTable) {
+          ctx.beginPath();
+          ctx.moveTo(50, y);
+          ctx.lineTo(182, y);
+          ctx.stroke();
+        }
+
+        if (hasRightTable) {
+          ctx.beginPath();
+          ctx.moveTo(210, y);
+          ctx.lineTo(342, y);
+          ctx.stroke();
+        }
       } else {
         ctx.beginPath();
         ctx.moveTo(LAB_LEFT + 8, y);
@@ -1400,15 +1602,19 @@ function drawMap() {
     drawHallwayLabels(ctx, layout);
 
     // 4. Thermal Heatmap Congestion Bloom
-    drawClearEgressLanes(ctx, layout);
     drawHeatmap(ctx, layout);
 
     // 5. Blueprint elements
     drawWorkstationBenches(ctx, layout);
     layout.workstations.forEach(([x, y]) => drawWorkstationBlueprint(ctx, x, y));
-    layout.extraPcs.forEach(([x, y]) => drawWorkstationBlueprint(ctx, x, y));
+    if (state.mode === "current") {
+      drawCurrentRearExtraPcArea(ctx, layout);
+    } else {
+      layout.extraPcs.forEach(([x, y]) => drawWorkstationBlueprint(ctx, x, y));
+    }
     layout.instructorDesk.forEach(([x, y], idx) => drawInstructorDeskBlueprint(ctx, x, y, idx));
     drawWhiteboard(ctx, layout);
+    drawStudentWorkstationAreaLabel(ctx);
     drawTeacherArea(ctx);
     drawEntranceAreaBlueprint(ctx, layout);
     
@@ -1419,9 +1625,6 @@ function drawMap() {
     drawDoorSwingBlueprint(ctx, layout.backExit);
     
     (layout.fireExtinguishers || []).forEach((pos) => drawFireExtinguisherBlueprint(ctx, pos));
-    
-    drawStaircaseBlueprint(ctx, layout.frontStairs[0], layout.frontStairs[1]);
-    drawStaircaseBlueprint(ctx, layout.emergencyStairs[0], layout.emergencyStairs[1]);
     
     // 6. pulsing fire smoke plume
     const fireCells = state.fireCells && state.fireCells.length ? state.fireCells : [layout.fireOrigin];
