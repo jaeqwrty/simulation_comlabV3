@@ -8,3 +8,6 @@ __pycache__/
 *.gif
 *.png
 
+# Project scratch and backup directories
+scratch/
+comlab_v3/static_backup/
