@@ -237,7 +237,7 @@ class SimulationValidationTests(unittest.TestCase):
         self.assertEqual(EXTINGUISHER_ASSISTANT, (6, 9))
         self.assertEqual(EXTINGUISHER_SHELVES, (6, 11))
 
-    def test_modified_layout_keeps_four_computer_tables_and_rear_service_zone(self):
+    def test_modified_layout_keeps_36_workstations_and_rear_service_zone(self):
         sim = Simulation("modified", panic=True, fire_origin="data")
         self.assertEqual(sim.storage, MODIFIED_LOCKER)
         self.assertEqual(sim.locker, MODIFIED_LOCKER)
@@ -248,6 +248,8 @@ class SimulationValidationTests(unittest.TestCase):
         self.assertEqual(sim.service_bay_passage, (6, 11))
         self.assertNotIn(sim.storage, sim.data_racks | sim.service_bay_staff)
         self.assertEqual(len(sim.workstations), 36)
+        self.assertEqual(sim.workstation_rows, (1, 2, 4, 5, 7))
+        self.assertFalse(any((x, 7) in sim.workstations_set for x in {4, 5, 6, 7}))
 
         table_count = 0
         for row in sim.workstation_rows:

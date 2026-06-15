@@ -131,7 +131,7 @@ def fire_origin_for(origin: str, mode: str = "current") -> tuple[int, int]:
         if origin == "desk":
             return (6, 0)
         elif origin == "workstation":
-            return (3, 5)
+            return (2, 5)
         elif origin in {"locker", "shelves"}:
             return storage_for(mode)
         elif origin == "assistant":
@@ -376,7 +376,7 @@ class Simulation:
                 (x, y)
                 for y in (1, 2, 4, 5)
                 for x in range(8)
-            ] + [(x, 7) for x in range(4, 8)]
+            ] + [(x, 7) for x in range(4)]
             self.workstations_set = set(self.workstations)
             self.data_racks = {(0, 11), (1, 11), (2, 11)}
             self.student_assistant_desk = {(3, 11), (4, 11), (5, 11)}

@@ -94,7 +94,7 @@ function layoutFor(mode = "current", fireOrigin = "data") {
     [1, 2, 4, 5].forEach((y) => {
       [0, 1, 2, 3, 4, 5, 6, 7].forEach((x) => workstations.push([x, y]));
     });
-    [4, 5, 6, 7].forEach((x) => workstations.push([x, 7]));
+    [0, 1, 2, 3].forEach((x) => workstations.push([x, 7]));
   } else {
     const cols = [0, 1, 2, 4, 5, 6];
     rows.forEach((y) => cols.forEach((x) => workstations.push([x, y])));
@@ -102,7 +102,7 @@ function layoutFor(mode = "current", fireOrigin = "data") {
 
   const storage = modified ? [7, 11] : [7, 11];
   const fireOrigins = modified
-    ? { data: [1, 11], desk: [6, 0], workstation: [3, 5], locker: storage, shelves: storage, assistant: [4, 11] }
+    ? { data: [1, 11], desk: [6, 0], workstation: [2, 5], locker: storage, shelves: storage, assistant: [4, 11] }
     : { data: [7, 4], desk: [6, 0], workstation: [2, 5], locker: storage, shelves: storage, assistant: [7, 8] };
 
   return {
@@ -120,8 +120,8 @@ function layoutFor(mode = "current", fireOrigin = "data") {
     storage,
     frontExit: [8, 0],
     backExit: [8, 11],
-    frontStairs: [12, 1],
-    emergencyStairs: [12, 11],
+    frontStairs: null,
+    emergencyStairs: null,
     locker: storage,
     fireOrigin: fireOrigins[fireOrigin] || fireOrigins.data,
     fireCells: [fireOrigins[fireOrigin] || fireOrigins.data],
@@ -189,9 +189,9 @@ function visualCenter(x, y) {
   if (state && state.mode === "modified") {
     let cx;
     if (x >= 0 && x <= 3) {
-      cx = 38 + x * 36; // Left 4-computer table
+      cx = 38 + x * 36;
     } else if (x >= 4 && x <= 7) {
-      cx = 218 + (x - 4) * 36; // Right 4-computer table
+      cx = 218 + (x - 4) * 36;
     } else if (x === 8) {
       cx = EXIT_X;
     } else if (x >= 9) {
@@ -414,7 +414,7 @@ function syncFromState() {
   els.layoutTitle.textContent = state.mode === "current" ? "Current Layout" : "Modified Layout";
   els.layoutNote.textContent = state.mode === "current"
     ? "Locker near the Entrance door creates cross-traffic with evacuating agents."
-    : "Safer layout: 4-computer student tables, rear staff service zone, unified bag/shelf storage, clear center aisle, and reachable extinguishers.";
+    : "Safer layout: 36 student workstations, rear staff service zone, unified bag/shelf storage, clear center aisle, and reachable extinguishers.";
 }
 
 function triggerDraw() {
@@ -1491,26 +1491,6 @@ function drawHallwayLabels(ctx, layout) {
   ctx.lineTo(cx + 12, 36);
   ctx.stroke();
 
-  // Bottom direction: "entrance" with a DOWN arrow
-  drawBlueprintTag(ctx, "Entrance", cx + 8, MAP_H - 20, {
-    tone: "slate",
-    size: 6.2,
-    paddingX: 5,
-    paddingY: 2
-  });
-  
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
-  ctx.lineWidth = 1.8;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.beginPath();
-  ctx.moveTo(cx + 8, MAP_H - 48);
-  ctx.lineTo(cx + 8, MAP_H - 32);
-  ctx.lineTo(cx + 4, MAP_H - 36);
-  ctx.moveTo(cx + 8, MAP_H - 32);
-  ctx.lineTo(cx + 12, MAP_H - 36);
-  ctx.stroke();
-
   // 4. Vertical label: "HALLWAY" (centered in the middle of the hallway)
   ctx.save();
   ctx.translate(cx - 4, MAP_H / 2);
@@ -1645,9 +1625,6 @@ function drawMap() {
     drawDoorSwingBlueprint(ctx, layout.backExit);
     
     (layout.fireExtinguishers || []).forEach((pos) => drawFireExtinguisherBlueprint(ctx, pos));
-    
-    drawStaircaseBlueprint(ctx, layout.frontStairs[0], layout.frontStairs[1]);
-    drawStaircaseBlueprint(ctx, layout.emergencyStairs[0], layout.emergencyStairs[1]);
     
     // 6. pulsing fire smoke plume
     const fireCells = state.fireCells && state.fireCells.length ? state.fireCells : [layout.fireOrigin];
