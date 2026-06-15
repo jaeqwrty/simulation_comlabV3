@@ -1,1 +1,4 @@
-import { Store } from './store.js';\nimport { els } from './ui.js';\nimport { post, poll } from './api.js';\nimport { triggerDraw } from './renderer.js';\n\n\n\n
+import { Store } from './store.js';
+import { els } from './ui.js';
+import { post, poll } from './api.js';
+import { triggerDraw } from './renderer.js';

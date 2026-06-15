@@ -1,1 +1,3 @@
-import { Store } from './store.js';\nimport { syncFromState } from './ui.js';\nimport { triggerDraw } from './renderer.js';\n\n
+import { Store } from './store.js';
+import { syncFromState } from './ui.js';
+import { triggerDraw } from './renderer.js';
