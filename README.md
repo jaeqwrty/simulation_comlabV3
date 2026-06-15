@@ -36,13 +36,13 @@ python run.py
 
 ## Vercel Deployment
 
-The repository includes a Vercel-compatible FastAPI entrypoint:
+The repository includes a Vercel-compatible structure:
 
-- `app.py` serves `/`, `/app.css`, `/app.js`, and `/api/*`.
-- `requirements.txt` installs the Python runtime dependency.
-- `vercel.json` rewrites all routes to the ASGI app, so the root deployment URL does not return `404: NOT_FOUND`.
+- `public/` contains `index.html`, `app.css`, and `app.js` for the deployed frontend.
+- `api/index.py` handles `/api/state`, `/api/control`, `/api/reset`, and `/api/compare`.
+- `vercel.json` routes API requests to the Python serverless function and browser routes to `index.html`.
 
-Deploy from the repository root. No build command or output directory is required.
+Deploy from the repository root. No build command or output directory is required. If the Vercel dashboard has an Output Directory set, clear it so Vercel serves the root project normally.
 
 ## Try It
 

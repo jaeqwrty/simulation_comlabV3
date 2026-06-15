@@ -1,14 +1,13 @@
-"""Vercel-compatible ASGI entrypoint for the ComLab V3 simulation."""
+"""Vercel serverless API for the ComLab V3 simulation."""
 
 from __future__ import annotations
 
+import json
 import time
-from pathlib import Path
+from http.server import BaseHTTPRequestHandler
 from threading import RLock
 from typing import Any
-
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from urllib.parse import urlparse
 
 from comlab_v3.engine import (
     BACK_EXIT,
@@ -26,15 +25,8 @@ from comlab_v3.engine import (
 )
 
 
-STATIC_DIR = Path(__file__).parent / "comlab_v3" / "static"
-
-
 class VercelSimulationService:
-    """Request-driven simulation service for serverless deployments.
-
-    Vercel functions should not depend on a forever-running background thread.
-    Instead, this service advances the simulation when requests arrive.
-    """
+    """Request-driven simulation state for serverless deployments."""
 
     def __init__(self):
         self.lock = RLock()
@@ -112,21 +104,6 @@ class VercelSimulationService:
     def state(self):
         self.tick()
         sim = self.sim
-        agents = [
-            {
-                "id": agent.agent_id,
-                "kind": agent.kind,
-                "behavior": agent.behavior,
-                "role": role_for_agent(agent),
-                "x": agent.x,
-                "y": agent.y,
-                "target": agent.target,
-                "phase": agent.phase,
-                "exited": agent.exited,
-                "stamped_until": agent.stamped_until,
-            }
-            for agent in sim.agents
-        ]
         active = sum(1 for agent in sim.agents if not agent.exited)
         summary = sim.summary()
         return {
@@ -150,7 +127,21 @@ class VercelSimulationService:
             "exitUtilizationPercent": summary["exit_utilization_percent"],
             "processingTime": summary["processing_time"],
             "completed": sim.completed,
-            "agents": agents,
+            "agents": [
+                {
+                    "id": agent.agent_id,
+                    "kind": agent.kind,
+                    "behavior": agent.behavior,
+                    "role": role_for_agent(agent),
+                    "x": agent.x,
+                    "y": agent.y,
+                    "target": agent.target,
+                    "phase": agent.phase,
+                    "exited": agent.exited,
+                    "stamped_until": agent.stamped_until,
+                }
+                for agent in sim.agents
+            ],
             "heatmap": sim.heatmap,
             "rate": sim.rate[-120:],
             "events": sim.events[:40],
@@ -158,8 +149,7 @@ class VercelSimulationService:
         }
 
 
-service = VercelSimulationService()
-app = FastAPI()
+SERVICE = VercelSimulationService()
 
 
 def role_for_agent(agent) -> str:
@@ -211,45 +201,38 @@ def layout_payload(mode: str, fire_origin: str):
     }
 
 
-def static_file(filename: str, media_type: str):
-    path = STATIC_DIR / filename
-    if not path.exists():
-        raise HTTPException(status_code=404)
-    return FileResponse(path, media_type=media_type, headers={"Cache-Control": "no-store, max-age=0"})
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        path = urlparse(self.path).path
+        if path in {"/api", "/api/", "/api/state"}:
+            self.send_json(SERVICE.state())
+        else:
+            self.send_error(404)
 
+    def do_POST(self):
+        path = urlparse(self.path).path
+        payload = self.read_json()
 
-@app.get("/")
-def index():
-    return static_file("index.html", "text/html; charset=utf-8")
+        if path == "/api/control":
+            self.send_json(SERVICE.control(payload.get("action", "pause"), payload.get("config")))
+        elif path == "/api/reset":
+            self.send_json(SERVICE.reset(payload))
+        elif path == "/api/compare":
+            self.send_json(SERVICE.compare())
+        else:
+            self.send_error(404)
 
+    def read_json(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        if not length:
+            return {}
+        return json.loads(self.rfile.read(length).decode("utf-8"))
 
-@app.get("/app.css")
-def app_css():
-    return static_file("app.css", "text/css; charset=utf-8")
-
-
-@app.get("/app.js")
-def app_js():
-    return static_file("app.js", "text/javascript; charset=utf-8")
-
-
-@app.get("/api/state")
-def api_state():
-    return JSONResponse(service.state())
-
-
-@app.post("/api/control")
-async def api_control(request: Request):
-    payload = await request.json()
-    return JSONResponse(service.control(payload.get("action", "pause"), payload.get("config")))
-
-
-@app.post("/api/reset")
-async def api_reset(request: Request):
-    payload = await request.json()
-    return JSONResponse(service.reset(payload))
-
-
-@app.post("/api/compare")
-def api_compare():
-    return JSONResponse(service.compare())
+    def send_json(self, data):
+        encoded = json.dumps(data).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
