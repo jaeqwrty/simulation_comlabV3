@@ -1136,11 +1136,29 @@ class Simulation:
             self.door_cooldown[door] = self.time + 1
 
     def summary(self) -> dict[str, int]:
+        evacuated = sum(1 for agent in self.agents if agent.exited)
+        processing_time = self.time
+        wait_samples = [max(0, agent.wait_until) for agent in self.agents]
+        average_wait_time = round(sum(wait_samples) / len(wait_samples), 2) if wait_samples else 0.0
+        average_queue_length = round(
+            sum(max(0, len(self.agents) - evacuated_at_time) for _, evacuated_at_time in self.rate) / len(self.rate),
+            2,
+        ) if self.rate else 0.0
+        throughput_per_minute = round(evacuated / max(1, processing_time) * 60, 2)
+        exit_utilization_percent = round(
+            min(100.0, (evacuated / (max(1, processing_time) * 2)) * 100),
+            2,
+        )
         return {
             "time": self.time,
-            "evacuated": sum(1 for agent in self.agents if agent.exited),
+            "evacuated": evacuated,
             "trips": self.trips,
             "door_collisions": self.door_collisions,
             "max_heat": max(self.heatmap.values(), default=0),
             "fire_damage": self.fire_damage,
+            "average_wait_time": average_wait_time,
+            "average_queue_length": average_queue_length,
+            "throughput_per_minute": throughput_per_minute,
+            "exit_utilization_percent": exit_utilization_percent,
+            "processing_time": processing_time,
         }

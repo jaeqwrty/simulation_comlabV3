@@ -23,3 +23,5 @@ class Agent:
     stamped_until: int = 0   # pinned by stampede
     packed_up: bool = False  # finished packing belongings before standing up
     bay_passage_cleared: bool = False
+    wait_time: int = 0
+    exit_time: int | None = None

@@ -1081,7 +1081,7 @@ function drawClearEgressLanes(ctx, layout) {
   ctx.restore();
 }
 
-function drawLabeledBlock(ctx, x, y, w, h, label, fill, stroke) {
+function drawLabeledBlock(ctx, x, y, w, h, label, fill, stroke, align = "center") {
   ctx.save();
   ctx.fillStyle = fill;
   ctx.strokeStyle = stroke;
@@ -1091,15 +1091,24 @@ function drawLabeledBlock(ctx, x, y, w, h, label, fill, stroke) {
   ctx.fill();
   ctx.stroke();
 
-  ctx.fillStyle = "rgba(226, 232, 240, 0.92)";
+  ctx.fillStyle = "rgba(226, 232, 240, 0.45)"; // Faint text so agents pop
   const isVertical = w < h;
   ctx.font = isVertical ? "800 7.5px var(--font-sans)" : "800 9px var(--font-sans)";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
   const lines = label.split("\n");
-  const spacing = isVertical ? 7 : 10;
-  const startY = y + h / 2 - (lines.length - 1) * (spacing / 2);
+  const spacing = isVertical ? 9 : 10;
+  
+  let startY;
+  if (align === "top") {
+    startY = y + 14;
+  } else if (align === "bottom") {
+    startY = y + h - (lines.length - 1) * spacing - 14;
+  } else {
+    startY = y + h / 2 - (lines.length - 1) * (spacing / 2);
+  }
+  
   lines.forEach((line, index) => {
     ctx.fillText(line, x + w / 2, startY + index * spacing);
   });
@@ -1124,7 +1133,7 @@ function drawTeacherArea(ctx) {
     ctx.font = "800 8px var(--font-sans)";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("PROFESSOR", teacher.x, teacher.y);
+    ctx.fillText("PROFESSOR", teacher.x, teacher.y - 10);
   } else {
     ctx.fillStyle = "rgba(59, 130, 246, 0.16)";
     ctx.strokeStyle = "rgba(59, 130, 246, 0.55)";
@@ -1254,41 +1263,41 @@ function drawHallwayLabels(ctx, layout) {
     ctx.stroke();
   }
 
-  // 3. Directional labels in the walkway (centered on cx - 4)
+  // 3. Directional labels in the walkway (centered on cx + 8 to avoid door swings)
   // Top direction: "fire exit" with a red UP arrow
   ctx.fillStyle = "#ef4444"; // Red for fire exit direction
   ctx.font = "800 10.5px var(--font-sans)";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("fire exit", cx - 4, 20);
+  ctx.fillText("fire exit", cx + 8, 20);
   
   ctx.strokeStyle = "#ef4444";
   ctx.lineWidth = 1.8;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.beginPath();
-  ctx.moveTo(cx - 4, 48);
-  ctx.lineTo(cx - 4, 32);
-  ctx.lineTo(cx - 8, 36);
-  ctx.moveTo(cx - 4, 32);
-  ctx.lineTo(cx, 36);
+  ctx.moveTo(cx + 8, 48);
+  ctx.lineTo(cx + 8, 32);
+  ctx.lineTo(cx + 4, 36);
+  ctx.moveTo(cx + 8, 32);
+  ctx.lineTo(cx + 12, 36);
   ctx.stroke();
 
   // Bottom direction: "entrance" with a DOWN arrow
   ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
   ctx.font = "800 10.5px var(--font-sans)";
-  ctx.fillText("entrance", cx - 4, MAP_H - 20);
+  ctx.fillText("entrance", cx + 8, MAP_H - 20);
   
   ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
   ctx.lineWidth = 1.8;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.beginPath();
-  ctx.moveTo(cx - 4, MAP_H - 48);
-  ctx.lineTo(cx - 4, MAP_H - 32);
-  ctx.lineTo(cx - 8, MAP_H - 36);
-  ctx.moveTo(cx - 4, MAP_H - 32);
-  ctx.lineTo(cx, MAP_H - 36);
+  ctx.moveTo(cx + 8, MAP_H - 48);
+  ctx.lineTo(cx + 8, MAP_H - 32);
+  ctx.lineTo(cx + 4, MAP_H - 36);
+  ctx.moveTo(cx + 8, MAP_H - 32);
+  ctx.lineTo(cx + 12, MAP_H - 36);
   ctx.stroke();
 
   // 4. Vertical label: "HALLWAY" (centered in the middle of the hallway)
@@ -1670,6 +1679,10 @@ function drawMetrics() {
   $("mTrips").textContent = state.trips;
   $("mDoors").textContent = state.doorCollisions;
   $("mHeat").textContent = state.maxHeat;
+  $("mWait").textContent = `${Number(state.avgWait || 0).toFixed(1)}s`;
+  $("mQueue").textContent = Number(state.avgQueueLength || 0).toFixed(1);
+  $("mThroughput").textContent = `${Number(state.throughputPerMinute || 0).toFixed(1)}/m`;
+  $("mUtil").textContent = `${Number(state.exitUtilizationPercent || 0).toFixed(1)}%`;
 }
 
 // Rich Analytics Custom Area Line Chart
@@ -1807,9 +1820,18 @@ function drawEvents() {
   }).join("");
 }
 
-function comparisonRow(label, current, modified, suffix = "") {
-  const improvement = Number.isFinite(current) && current > 0
-    ? (current - modified) / current * 100
+function formatMetricValue(value, suffix = "", precision = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "-";
+  return `${number.toFixed(precision)}${suffix}`;
+}
+
+function comparisonRow(label, current, modified, options = {}) {
+  const { suffix = "", precision = 0, higherIsBetter = false } = options;
+  const currentValue = Number(current);
+  const modifiedValue = Number(modified);
+  const improvement = Number.isFinite(currentValue) && currentValue > 0
+    ? (higherIsBetter ? (modifiedValue - currentValue) : (currentValue - modifiedValue)) / currentValue * 100
     : null;
     
   let badge = "";
@@ -1822,7 +1844,26 @@ function comparisonRow(label, current, modified, suffix = "") {
     badge = `<span class="improvement-pill neutral">-</span>`;
   }
   
-  return `<tr><td>${label}</td><td>${current}${suffix}</td><td>${modified}${suffix}</td><td>${badge}</td></tr>`;
+  return `<tr><td>${label}</td><td>${formatMetricValue(current, suffix, precision)}</td><td>${formatMetricValue(modified, suffix, precision)}</td><td>${badge}</td></tr>`;
+}
+
+function comparisonAnalysis(data) {
+  const timeSaved = data.current.processing_time - data.modified.processing_time;
+  const waitSaved = data.current.average_wait_time - data.modified.average_wait_time;
+  const throughputGain = data.modified.throughput_per_minute - data.current.throughput_per_minute;
+  const timeText = timeSaved >= 0
+    ? `${timeSaved.toFixed(0)}s faster`
+    : `${Math.abs(timeSaved).toFixed(0)}s slower`;
+  const waitText = waitSaved >= 0
+    ? `${waitSaved.toFixed(1)}s less average waiting`
+    : `${Math.abs(waitSaved).toFixed(1)}s more average waiting`;
+  const throughputText = throughputGain >= 0
+    ? `${throughputGain.toFixed(1)} more agents/min`
+    : `${Math.abs(throughputGain).toFixed(1)} fewer agents/min`;
+
+  return `<div class="analysis-note">
+    Modified layout is ${timeText}, with ${waitText} and ${throughputText}. Use these deltas to support the conclusion and recommendations section.
+  </div>`;
 }
 
 els.start.onclick = () => post("/api/control", { action: running ? "pause" : "start", config: config() });
@@ -1850,12 +1891,16 @@ els.compare.onclick = async () => {
   els.comparison.innerHTML = `<table>
     <thead><tr><th>Metric</th><th>Current</th><th>Modified</th><th>Improvement</th></tr></thead>
     <tbody>
-      ${comparisonRow("Total time", data.current.time, data.modified.time, "s")}
+      ${comparisonRow("Total processing time", data.current.processing_time, data.modified.processing_time, { suffix: "s" })}
+      ${comparisonRow("Average waiting time", data.current.average_wait_time, data.modified.average_wait_time, { suffix: "s", precision: 1 })}
+      ${comparisonRow("Average queue length", data.current.average_queue_length, data.modified.average_queue_length, { precision: 1 })}
+      ${comparisonRow("Throughput", data.current.throughput_per_minute, data.modified.throughput_per_minute, { suffix: "/min", precision: 1, higherIsBetter: true })}
+      ${comparisonRow("Exit resource utilization", data.current.exit_utilization_percent, data.modified.exit_utilization_percent, { suffix: "%", precision: 1, higherIsBetter: true })}
       ${comparisonRow("Trips", data.current.trips, data.modified.trips)}
       ${comparisonRow("Door collisions", data.current.door_collisions, data.modified.door_collisions)}
       ${comparisonRow("Max heat", data.current.max_heat, data.modified.max_heat)}
     </tbody>
-  </table>`;
+  </table>${comparisonAnalysis(data)}`;
 };
 
 applyUrlConfig();
