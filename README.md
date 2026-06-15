@@ -34,6 +34,16 @@ If Python is already on PATH:
 python run.py
 ```
 
+## Vercel Deployment
+
+The repository includes a Vercel-compatible FastAPI entrypoint:
+
+- `app.py` serves `/`, `/app.css`, `/app.js`, and `/api/*`.
+- `requirements.txt` installs the Python runtime dependency.
+- `vercel.json` rewrites all routes to the ASGI app, so the root deployment URL does not return `404: NOT_FOUND`.
+
+Deploy from the repository root. No build command or output directory is required.
+
 ## Try It
 
 | What to try | What it shows |
