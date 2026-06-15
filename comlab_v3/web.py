@@ -23,6 +23,7 @@ from .engine import (
     EXTINGUISHER_PROFESSOR,
     EXTINGUISHER_SHELVES,
     FIRE_EXTINGUISHERS,
+    FIRE_LOCATION_LABELS,
     EXTRA_PCS,
     FRONT_EXIT,
     FRONT_STAIRS,
@@ -131,6 +132,7 @@ class SimulationService:
                 "role": role_for_agent(agent),
                 "x": agent.x,
                 "y": agent.y,
+                "target": agent.target,
                 "phase": agent.phase,
                 "exited": agent.exited,
                 "stamped_until": agent.stamped_until,
@@ -143,6 +145,7 @@ class SimulationService:
             "mode": self.mode,
             "panic": self.panic,
             "fireOrigin": self.fire_origin,
+            "fireCells": sorted(sim.active_fire_cells),
             "speed": self.speed,
             "time": sim.time,
             "active": active,
@@ -150,6 +153,7 @@ class SimulationService:
             "totalAgents": len(sim.agents),
             "trips": sim.trips,
             "doorCollisions": sim.door_collisions,
+            "fireDamage": sim.fire_damage,
             "maxHeat": max(sim.heatmap.values(), default=0),
             "completed": sim.completed,
             "agents": agents,
@@ -182,6 +186,8 @@ def layout_payload(mode: str, fire_origin: str):
         "modifiedLocker": MODIFIED_LOCKER,
         "locker": sim.locker,
         "fireOrigin": sim.fire_origin,
+        "fireCells": sorted(sim.active_fire_cells),
+        "fireLocations": FIRE_LOCATION_LABELS,
         "cell": CELL,
         "hallwayWall": sorted(HALLWAY_WALL),
         "partitionWall": sorted(sim.partition_wall),
@@ -201,10 +207,10 @@ SERVICE = SimulationService()
 def role_for_agent(agent) -> str:
     roles = {
         "I01": "Professor / extinguisher lead",
-        "PA1": "Front aisle student aide",
-        "PA2": "Back aisle student aide",
-        "LC1": "Front exit door holder",
-        "LC2": "Back exit door holder",
+        "PA1": "Front exit door holder",
+        "PA2": "Back exit door holder",
+        "LC1": "Fire response / front student aide",
+        "LC2": "Fire response / back student aide",
     }
     return roles.get(agent.agent_id, agent.behavior)
 

@@ -22,7 +22,7 @@ BACK_EXIT = (8, 11)
 FRONT_STAIRS = (12, 1)
 EMERGENCY_STAIRS = (12, 11)
 CURRENT_LOCKER = (7, 11)
-MODIFIED_LOCKER = (7, 10)
+MODIFIED_LOCKER = (1, 11)
 DATA_RACKS = {(7, y) for y in range(2, 7)}
 STUDENT_ASSISTANT_DESK = {(7, y) for y in range(7, 10)}
 EXTRA_PCS = {(x, 11) for x in range(4)}
@@ -51,6 +51,15 @@ FIRE_EXTINGUISHERS = (EXTINGUISHER_PROFESSOR, EXTINGUISHER_ASSISTANT, EXTINGUISH
 EXTINGUISHER_EXIT = EXTINGUISHER_PROFESSOR
 EXTINGUISHER_ENTRANCE = None
 
+FIRE_LOCATION_LABELS = {
+    "data": "Data / communication rack",
+    "desk": "Instructor desk",
+    "workstation": "Student workstation row",
+    "locker": "Locker / bag storage",
+    "shelves": "Supply shelves",
+    "assistant": "Student assistant bay",
+}
+
 
 
 @dataclass
@@ -74,6 +83,8 @@ class Agent:
     stamped_until: int = 0   # pinned by stampede
     packed_up: bool = False  # finished packing belongings before standing up
     bay_passage_cleared: bool = False  # staff used the (7,10)->(6,10) passage gap
+    panic_prone: bool = False
+    mobility_factor: float = 1.0
 
 
 
@@ -114,13 +125,25 @@ def fire_origin_for(origin: str, mode: str = "current") -> tuple[int, int]:
             return (6, 0)
         elif origin == "workstation":
             return (3, 5)
+        elif origin == "locker":
+            return MODIFIED_LOCKER
+        elif origin == "shelves":
+            return (7, 10)
+        elif origin == "assistant":
+            return (0, 8)
         else:  # "data"
-            return (0, 4)
+            return (0, 7)
     else:
         if origin == "desk":
             return (6, 0)
         elif origin == "workstation":
             return (2, 5)
+        elif origin == "locker":
+            return (7, 11)
+        elif origin == "shelves":
+            return (7, 11)
+        elif origin == "assistant":
+            return (7, 8)
         else:  # "data"
             return (7, 4)
 
@@ -256,7 +279,7 @@ def neighbors(
     mode: str = "current",
 ) -> list[tuple[int, int]]:
     x, y = pos
-    workstation_cols = {2, 3, 5, 6} if mode == "modified" else {0, 1, 2, 4, 5, 6}
+    workstation_cols = {1, 2, 3, 5, 6, 7} if mode == "modified" else {0, 1, 2, 4, 5, 6}
     staff_col = 1 if mode == "modified" else 6
 
     if x in workstation_cols:
@@ -323,22 +346,22 @@ class Simulation:
         
         # Configure layout properties dynamically based on mode
         if mode == "modified":
-            self.workstation_rows = (1, 2, 3, 5, 6, 7, 8, 9, 10)
-            self.workstations = [(x, y) for y in self.workstation_rows for x in (2, 3, 5, 6)]
+            self.workstation_rows = (1, 2, 4, 5, 7, 8)
+            self.workstations = [(x, y) for y in self.workstation_rows for x in (1, 2, 3, 5, 6, 7)]
             self.workstations_set = set(self.workstations)
-            self.data_racks = {(0, y) for y in range(2, 7)}
-            self.student_assistant_desk = {(0, y) for y in range(7, 10)}
-            self.extra_pcs = {(2, 11), (3, 11), (5, 11)}
+            self.data_racks = {(0, 6), (0, 7)}
+            self.student_assistant_desk = {(0, 8), (0, 9)}
+            self.extra_pcs = set()
             self.shelves = {(7, 10)}
             self.instructor_desk = {(6, 0)}
-            self.locker = (7, 10)
+            self.locker = MODIFIED_LOCKER
             self.partition_wall = self.data_racks | self.student_assistant_desk
             self.service_bay_passage = (0, 10)
             self.service_bay_staff = self.data_racks | self.student_assistant_desk | {self.service_bay_passage}
             self.assistant_aid_posts = {"front": (4, 4), "back": (4, 8)}
-            self.extinguisher_professor = (1, 0)
-            self.extinguisher_assistant = (1, 9)
-            self.extinguisher_shelves = (6, 11)
+            self.extinguisher_professor = (4, 0)
+            self.extinguisher_assistant = (1, 10)
+            self.extinguisher_shelves = (7, 11)
             self.fire_extinguishers = (self.extinguisher_professor, self.extinguisher_assistant, self.extinguisher_shelves)
             self.extinguisher_exit = self.extinguisher_professor
             self.extinguisher_entrance = None
@@ -375,6 +398,9 @@ class Simulation:
         self.time = 0
         self.trips = 0
         self.door_collisions = 0
+        self.fire_damage = 0
+        self.suppression_level = 0
+        self.active_fire_cells: set[tuple[int, int]] = {self.fire_origin}
         self.door_cooldown = {"front": 0, "back": 0}
         self.heatmap: dict[str, int] = {}
         self.rate = [(0, 0)]
@@ -387,6 +413,75 @@ class Simulation:
             1 if self.mode == "modified" else 6
         )
         self.agents = self.make_agents()
+
+    def fire_fuel_weight(self, pos: tuple[int, int]) -> float:
+        if pos in self.data_racks:
+            return 2.4
+        if pos in self.workstations_set or pos in self.extra_pcs:
+            return 2.0
+        if pos in self.student_assistant_desk:
+            return 1.8
+        if pos in self.shelves or pos == self.locker:
+            return 1.7
+        if pos in self.instructor_desk:
+            return 1.5
+        if is_lab_cell(pos):
+            return 1.0
+        return 0.0
+
+    def fire_neighbors(self, pos: tuple[int, int]) -> list[tuple[int, int]]:
+        x, y = pos
+        candidates = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+        return [
+            item
+            for item in candidates
+            if is_lab_cell(item) and item not in {FRONT_EXIT, BACK_EXIT}
+        ]
+
+    def spread_fire(self, density: dict[tuple[int, int], int]):
+        if not self.active_fire_cells:
+            return
+
+        spread_interval = 7 if self.mode == "current" else 9
+        if self.time % spread_interval != 0:
+            return
+
+        suppression = min(0.80, self.suppression_level * 0.25)
+        max_cells = 16 if self.mode == "current" else 12
+        if len(self.active_fire_cells) >= max_cells:
+            return
+
+        new_cells: set[tuple[int, int]] = set()
+        for source in sorted(self.active_fire_cells):
+            for candidate in self.fire_neighbors(source):
+                if candidate in self.active_fire_cells:
+                    continue
+
+                fuel = self.fire_fuel_weight(candidate)
+                if fuel <= 0:
+                    continue
+
+                congestion = min(0.20, density.get(candidate, 0) * 0.04)
+                heat = min(0.18, self.heatmap.get(cell_key(candidate), 0) / 360)
+                wiring_bonus = 0.08 if candidate in self.workstations_set | self.data_racks | self.extra_pcs else 0.0
+                base = 0.010 if self.mode == "modified" else 0.016
+                chance = (base * fuel + congestion + heat + wiring_bonus) * (1 - suppression)
+                if self.panic:
+                    chance += 0.006
+
+                roll_seed = self.time * 1009 + candidate[0] * 37 + candidate[1] * 101 + len(self.active_fire_cells)
+                if seeded_random(roll_seed) < min(0.34, chance):
+                    new_cells.add(candidate)
+
+        if new_cells:
+            room_left = max_cells - len(self.active_fire_cells)
+            added = set(sorted(new_cells)[:room_left])
+            self.active_fire_cells.update(added)
+            self.add_event("extinguisher", f"Fire spread to {len(self.active_fire_cells)} lab cells")
+            self.path_cache.clear()
+
+    def distance_to_fire(self, pos: tuple[int, int]) -> int:
+        return min((manhattan(pos, fire_cell) for fire_cell in self.active_fire_cells), default=99)
 
     def path_edges_for(
         self,
@@ -413,6 +508,22 @@ class Simulation:
     ) -> list[tuple[int, int]]:
         cleared = bool(agent and agent.bay_passage_cleared)
         fire_passable = self.fire_origin if is_service_bay_staff(agent_kind) else None
+        blocked_cells = self.blocked_cells
+        if agent_kind == "student":
+            blocked_cells = set(self.blocked_cells) | (self.active_fire_cells - {start, target})
+        path = find_path(
+            start,
+            target,
+            blocked_cells,
+            agent_kind,
+            self.path_edges_for(agent_kind, cleared),
+            fire_passable,
+            self.workstations_set,
+            self.service_bay_staff,
+            self.mode,
+        )
+        if path or agent_kind != "student":
+            return path
         return find_path(
             start,
             target,
@@ -448,6 +559,12 @@ class Simulation:
             else:  # locker
                 pack_delay = 6 + int(seeded_random(index + 31) * 7)   # 6-12
 
+            panic_prone = seeded_random(index + 201) < 0.28
+            mobility_factor = 0.78 + seeded_random(index + 301) * 0.32
+            if self.panic and panic_prone:
+                pack_delay += 1 + int(seeded_random(index + 401) * 3)
+                mobility_factor *= 0.85
+
             agents.append(
                 Agent(
                     agent_id=f"S{index + 1:02d}",
@@ -459,6 +576,8 @@ class Simulation:
                     wait_until=pack_delay,
                     target=seat,
                     assigned_exit=None,
+                    panic_prone=panic_prone,
+                    mobility_factor=mobility_factor,
                 )
             )
 
@@ -468,8 +587,8 @@ class Simulation:
                     Agent("I01", "instructor", "instructor", 6, 0, 101, wait_until=1, target=(6, 0), phase="waiting"),
                     Agent("PA1", "assistant", "assistant", 0, 8, 102, wait_until=1, target=(0, 8), phase="waiting", assigned_exit="front"),
                     Agent("PA2", "assistant", "assistant", 0, 9, 103, wait_until=1, target=(0, 9), phase="waiting", assigned_exit="back"),
-                    Agent("LC1", "custodian", "custodian", 0, 3, 104, wait_until=1, target=(0, 3), phase="waiting", assigned_exit="front"),
-                    Agent("LC2", "custodian", "custodian", 0, 5, 105, wait_until=1, target=(0, 5), phase="waiting", assigned_exit="back"),
+                    Agent("LC1", "custodian", "custodian", 0, 6, 104, wait_until=1, target=(0, 6), phase="waiting", assigned_exit="front"),
+                    Agent("LC2", "custodian", "custodian", 0, 7, 105, wait_until=1, target=(0, 7), phase="waiting", assigned_exit="back"),
                 ]
             )
         else:
@@ -513,19 +632,54 @@ class Simulation:
             else:
                 preferred = FRONT_EXIT if manhattan((agent.x, agent.y), FRONT_EXIT) <= manhattan((agent.x, agent.y), BACK_EXIT) else BACK_EXIT
 
+        other = BACK_EXIT if preferred == FRONT_EXIT else FRONT_EXIT
+        if self.distance_to_fire(preferred) <= 2 and self.distance_to_fire(other) > self.distance_to_fire(preferred):
+            preferred = other
+
         if self.find_agent_path((agent.x, agent.y), preferred, agent.kind, agent):
             return preferred
-        other = BACK_EXIT if preferred == FRONT_EXIT else FRONT_EXIT
         if self.find_agent_path((agent.x, agent.y), other, agent.kind, agent):
             return other
         return preferred
+
+    def emergency_extinguisher_for(self, agent: Agent) -> tuple[int, int]:
+        options = sorted(
+            self.fire_extinguishers,
+            key=lambda pos: (manhattan((agent.x, agent.y), pos), manhattan(pos, self.fire_origin)),
+        )
+        for option in options:
+            if self.find_agent_path((agent.x, agent.y), option, agent.kind, agent):
+                return option
+        return options[0]
+
+    def distressed_student_target(self, agent: Agent) -> tuple[int, int] | None:
+        distressed = [
+            item
+            for item in self.agents
+            if item.kind == "student"
+            and not item.exited
+            and item.phase in {"tripped", "fainted", "hesitating", "panic_freeze"}
+        ]
+        if not distressed:
+            return None
+        nearest = min(distressed, key=lambda item: manhattan((agent.x, agent.y), (item.x, item.y)))
+        return (nearest.x, nearest.y)
 
     def target_for(self, agent: Agent, density: dict[tuple[int, int], int]) -> tuple[int, int]:
         if agent.kind == "student":
             if self.time < agent.wait_until:
                 return agent.target
             if agent.behavior == "locker" and not agent.visited_locker:
-                target_cell = locker_for(self.mode)
+                locker_cell = locker_for(self.mode)
+                locker_safe = (
+                    self.distance_to_fire(locker_cell) > 2
+                    and len(self.active_fire_cells) < 8
+                    and self.fire_damage < 900
+                )
+                if locker_safe and self.find_agent_path((agent.x, agent.y), locker_cell, agent.kind, agent):
+                    target_cell = locker_cell
+                else:
+                    target_cell = self.choose_exit(agent, density)
             elif agent.behavior == "peer" and agent.phase == "waiting":
                 peer_col = 4 if self.mode == "modified" else 3
                 return (peer_col, agent.y)
@@ -535,7 +689,7 @@ class Simulation:
             if agent.phase == "waiting" or self.time < agent.wait_until:
                 return agent.target
             if agent.phase in {"to_extinguisher", "retrieving_extinguisher"}:
-                return self.extinguisher_exit
+                return agent.target if agent.target in self.fire_extinguishers else self.emergency_extinguisher_for(agent)
             target_cell = self.choose_exit(agent, density)
         elif agent.kind in {"assistant", "custodian"}:
             if self.time < agent.wait_until:
@@ -545,12 +699,20 @@ class Simulation:
                 return bay_step
 
             if agent.kind == "assistant":
-                students_left = any(
-                    item.kind in {"student", "instructor"} and not item.exited
-                    for item in self.agents
-                )
-                if students_left:
-                    return self.assistant_aid_posts[agent.assigned_exit or "back"]
+                preferred = FRONT_EXIT if agent.assigned_exit == "front" else BACK_EXIT
+                if (agent.x, agent.y) == preferred or self.find_agent_path((agent.x, agent.y), preferred, agent.kind, agent):
+                    return preferred
+                return BACK_EXIT if preferred == FRONT_EXIT else FRONT_EXIT
+
+            if agent.phase in {"to_extinguisher", "suppressing_fire"}:
+                return agent.target if agent.target in self.fire_extinguishers else self.emergency_extinguisher_for(agent)
+
+            students_left = any(item.kind == "student" and not item.exited for item in self.agents)
+            if students_left:
+                distressed_target = self.distressed_student_target(agent)
+                if distressed_target is not None:
+                    return distressed_target
+                return self.assistant_aid_posts[agent.assigned_exit or "back"]
 
             preferred = FRONT_EXIT if agent.assigned_exit == "front" else BACK_EXIT
             if self.find_agent_path((agent.x, agent.y), preferred, agent.kind, agent):
@@ -569,12 +731,19 @@ class Simulation:
             aisle_col = 4 if self.mode == "modified" else 3
             if agent.x != aisle_col:
                 target_row = 10 if agent.y == 11 else agent.y
-                return (aisle_col, target_row)
+                waypoint = (aisle_col, target_row)
+                if self.distance_to_fire(waypoint) <= 1:
+                    return (aisle_col, 0 if target_row >= 10 else 10)
+                return waypoint
             else:
                 if target_cell[1] == 0:
-                    return (aisle_col, 10) if (aisle_col, 0) == self.fire_origin else (aisle_col, 0)
+                    if self.distance_to_fire((aisle_col, 0)) <= 1:
+                        return BACK_EXIT if self.find_agent_path((agent.x, agent.y), BACK_EXIT, agent.kind, agent) else (aisle_col, 10)
+                    return (aisle_col, 0)
                 else:
-                    return (aisle_col, 0) if (aisle_col, 10) == self.fire_origin else (aisle_col, 10)
+                    if self.distance_to_fire((aisle_col, 10)) <= 1:
+                        return FRONT_EXIT if self.find_agent_path((agent.x, agent.y), FRONT_EXIT, agent.kind, agent) else (aisle_col, 0)
+                    return (aisle_col, 10)
         return target_cell
 
     def speed_for(self, agent: Agent, density: dict[tuple[int, int], int]) -> float:
@@ -583,7 +752,7 @@ class Simulation:
         crowded = density.get((agent.x, agent.y), 1)
 
         aisle_col = 4 if self.mode == "modified" else 3
-        non_squeeze_cols = {1, 4, 7} if self.mode == "modified" else {3, 7}
+        non_squeeze_cols = {4} if self.mode == "modified" else {3, 7}
 
         # Row-workstation squeeze: narrow gap between rows slows movement
         if is_lab_cell((agent.x, agent.y)) and agent.x not in non_squeeze_cols:
@@ -596,8 +765,8 @@ class Simulation:
             if crowded >= 4:
                 speed *= 0.45  # near-crush
 
-        # Heat/smoke zone near fire origin
-        if manhattan((agent.x, agent.y), self.fire_origin) <= 3:
+        # Heat/smoke zone near any active fire cell
+        if self.distance_to_fire((agent.x, agent.y)) <= 3:
             speed *= 0.65
 
         # General crowd slowdown
@@ -608,11 +777,19 @@ class Simulation:
 
         # Panic does NOT necessarily speed people up — it causes hesitation
         if self.panic:
-            speed *= 0.85 if agent.kind in ("student", "assistant") else 0.78
+            if agent.kind == "student":
+                speed *= 0.85
+            elif agent.kind == "assistant":
+                speed *= 0.95
+            if agent.kind == "student" and agent.panic_prone:
+                speed *= 0.78
 
         # Modified layout has clearer pathways and better signage
         if self.mode == "modified":
             speed *= 1.80
+
+        if agent.kind == "student":
+            speed *= agent.mobility_factor
 
         return speed
 
@@ -628,6 +805,18 @@ class Simulation:
         for pos, count in density.items():
             density_key = f"{pos[0]},{pos[1]}"
             self.heatmap[density_key] = self.heatmap.get(density_key, 0) + count
+
+        suppressors = sum(
+            1
+            for agent in self.agents
+            if agent.kind in {"instructor", "custodian"}
+            and agent.phase in {"retrieving_extinguisher", "suppressing_fire", "aiding_students"}
+            and not agent.exited
+            and manhattan((agent.x, agent.y), self.fire_origin) <= 6
+        )
+        self.suppression_level = suppressors
+        self.spread_fire(density)
+        self.fire_damage += max(0, 2 + len(self.active_fire_cells) - suppressors * 3)
 
         for agent in self.agents:
             if agent.exited:
@@ -654,30 +843,41 @@ class Simulation:
                     agent.phase = "evacuating"
                 elif agent.phase == "waiting" and self.time >= agent.wait_until:
                     agent.phase = "evacuating"
-                elif agent.phase == "hesitating":
+                elif agent.phase in {"hesitating", "panic_freeze"}:
                     agent.phase = "evacuating"
             elif agent.kind == "instructor":
                 if agent.phase == "waiting" and self.time >= agent.wait_until:
                     agent.phase = "to_extinguisher"
+                    agent.target = self.emergency_extinguisher_for(agent)
+                    agent.path = []
                     self.add_event("move", "Professor alerted — moving to fire extinguisher")
                 elif agent.phase == "retrieving_extinguisher" and self.time >= agent.wait_until:
+                    agent.phase = "suppressing_fire"
+                    agent.wait_until = self.time + 3
+                    self.add_event("extinguisher", "Professor used extinguisher to slow the fire spread")
+                elif agent.phase == "suppressing_fire" and self.time >= agent.wait_until:
                     agent.phase = "evacuating"
-                    self.add_event("move", "Professor retrieved extinguisher and resumed egress")
+                    self.add_event("move", "Professor finished fire response and resumed egress")
             elif agent.kind in {"assistant", "custodian"}:
                 if agent.phase == "waiting" and self.time >= agent.wait_until:
                     exit_label = "front" if agent.assigned_exit == "front" else "back"
                     if agent.kind == "custodian":
+                        agent.phase = "to_extinguisher"
+                        agent.target = self.emergency_extinguisher_for(agent)
+                        agent.path = []
+                        self.add_event(
+                            "move",
+                            f"Custodian {agent.agent_id} moving through the passage to reduce fire damage and assist students",
+                        )
+                    else:
                         agent.phase = "holding_door"
                         self.add_event(
                             "move",
-                            f"Custodian {agent.agent_id} moving through the passage to hold the {exit_label} exit",
+                            f"Student assistant {agent.agent_id} moving through the passage to hold the {exit_label} exit",
                         )
-                    else:
-                        agent.phase = "aiding_students"
-                        self.add_event(
-                            "move",
-                            f"Student assistant {agent.agent_id} moving through the passage to aid students near the {exit_label} aisle",
-                        )
+                elif agent.kind == "custodian" and agent.phase == "suppressing_fire" and self.time >= agent.wait_until:
+                    agent.phase = "aiding_students"
+                    self.add_event("move", f"Custodian {agent.agent_id} finished first-response fire control and began assisting students")
 
             new_target = self.target_for(agent, density)
             if new_target != agent.target:
@@ -688,12 +888,12 @@ class Simulation:
                 continue
 
             # Stampede pin: agent is knocked down by crowd surge
-            if agent.kind in ("student", "assistant") and self.time < agent.stamped_until:
+            if agent.kind == "student" and self.time < agent.stamped_until:
                 continue
 
             # Assistant proximity checks for recovery help and smoke fainting prevention
             assistant_near_current = any(
-                a.kind == "assistant"
+                (a.kind == "assistant" or (a.kind == "custodian" and a.phase == "aiding_students"))
                 and a.agent_id != agent.agent_id
                 and not a.exited
                 and abs(a.x - agent.x) + abs(a.y - agent.y) <= 2
@@ -701,16 +901,20 @@ class Simulation:
             )
 
             # Fire smoke/heat proximity fainting check
-            fire_dist = manhattan((agent.x, agent.y), self.fire_origin)
-            if agent.kind in ("student", "assistant") and fire_dist <= 2:
+            fire_dist = self.distance_to_fire((agent.x, agent.y))
+            if agent.kind == "student" and fire_dist <= 2:
                 faint_smoke_chance = 0.07 if self.panic else 0.03
+                if agent.kind == "student" and agent.panic_prone:
+                    faint_smoke_chance *= 1.55
+                if self.suppression_level:
+                    faint_smoke_chance *= max(0.25, 1 - self.suppression_level * 0.35)
                 if assistant_near_current:
-                    faint_smoke_chance *= 0.5
+                    faint_smoke_chance *= 0.25
                 if seeded_random(self.time * agent.seed + 555) < faint_smoke_chance:
                     # Faint from smoke — longer recovery, agents nearby must step around
                     duration = 6 if self.mode == "modified" else 18
                     if assistant_near_current:
-                        duration = max(4, duration // 2)
+                        duration = max(2, duration // 3)
                     agent.trip_until = self.time + duration
                     agent.phase = "fainted"
                     self.add_event("trip", f"{agent.agent_id} fainted from smoke/heat proximity")
@@ -735,8 +939,11 @@ class Simulation:
 
             agent.speed_bank += self.speed_for(agent, density)
             # Hesitation: panic causes freeze moments (increased frequency)
-            if self.panic and agent.kind in ("student", "assistant") and seeded_random(self.time + agent.seed) < 0.055:
-                agent.phase = "hesitating"
+            hesitation_chance = 0.055
+            if agent.kind == "student" and agent.panic_prone:
+                hesitation_chance = 0.16
+            if self.panic and agent.kind == "student" and seeded_random(self.time + agent.seed) < hesitation_chance:
+                agent.phase = "panic_freeze" if agent.panic_prone else "hesitating"
                 continue
             if agent.speed_bank < 1:
                 continue
@@ -752,7 +959,6 @@ class Simulation:
             ):
                 agent.path = []
                 continue
-
             agent.speed_bank -= 1
             local_density = density.get(next_cell, 0)
 
@@ -760,7 +966,7 @@ class Simulation:
             # In the centre aisle high crowd density can trigger a stampede
             # surge: agents at the back get knocked and pinned for several steps.
             aisle_col = 4 if self.mode == "modified" else 3
-            if agent.kind in ("student", "assistant") and agent.x == aisle_col and local_density >= 5 and self.panic:
+            if agent.kind == "student" and agent.x == aisle_col and local_density >= 5 and self.panic:
                 stamp_roll = seeded_random(self.time * agent.seed + 991)
                 if stamp_roll < 0.18:
                     pin_duration = 6 + int(seeded_random(self.time + agent.seed + 3) * 8)  # 6-13 steps
@@ -772,19 +978,21 @@ class Simulation:
             # ── Trip / faint check ────────────────────────────────────────────
             base_trip = 0.065 if local_density >= 3 else 0.022
             trip_chance = base_trip * (1.8 if self.panic else 1.0) * (0.20 if self.mode == "modified" else 1.0)
+            if agent.kind == "student" and agent.panic_prone:
+                trip_chance *= 1.45
             
             # Proximity to student assistants reduces tripping chance
             assistant_near_next = any(
-                a.kind == "assistant"
+                (a.kind == "assistant" or (a.kind == "custodian" and a.phase == "aiding_students"))
                 and a.agent_id != agent.agent_id
                 and not a.exited
                 and abs(a.x - next_cell[0]) + abs(a.y - next_cell[1]) <= 2
                 for a in self.agents
             )
             if assistant_near_next:
-                trip_chance *= 0.5
+                trip_chance *= 0.35
 
-            if agent.kind in ("student", "assistant") and seeded_random(self.time * agent.seed + self.trips) < trip_chance:
+            if agent.kind == "student" and seeded_random(self.time * agent.seed + self.trips) < trip_chance:
                 self.trips += 1
                 faint_roll = seeded_random(self.time * agent.seed + self.trips + 77)
                 is_faint = self.panic and faint_roll < 0.22   # higher faint chance
@@ -793,7 +1001,7 @@ class Simulation:
                     # Fainted: needs to be helped or self-recover — long delay
                     duration = 5 if self.mode == "modified" else 15
                     if assistant_near_next:
-                        duration = max(3, duration // 2)
+                        duration = max(2, duration // 3)
                     agent.trip_until = self.time + duration
                     agent.phase = "fainted"
                     self.add_event("trip", f"{agent.agent_id} fainted due to panic/smoke inhalation")
@@ -801,7 +1009,7 @@ class Simulation:
                     # Tripped: scrambles back up — moderate delay
                     duration = 3 if self.mode == "modified" else 7
                     if assistant_near_next:
-                        duration = max(2, duration - 2)
+                        duration = max(1, duration - 3)
                     agent.trip_until = self.time + duration
                     agent.phase = "tripped"
                     self.add_event("trip", f"{agent.agent_id} tripped in a congested zone")
@@ -842,10 +1050,15 @@ class Simulation:
             agent.wait_until = self.time + peer_delay
             agent.phase = "peer_wait"
             return
-        if agent.kind == "instructor" and agent.phase == "to_extinguisher" and pos == self.extinguisher_exit:
+        if agent.kind == "instructor" and agent.phase == "to_extinguisher" and pos == agent.target:
             agent.phase = "retrieving_extinguisher"
             agent.wait_until = self.time + 4   # realistic extinguisher grab time
-            self.add_event("extinguisher", "Professor retrieved fire extinguisher beside the front exit")
+            self.add_event("extinguisher", "Professor retrieved the nearest reachable fire extinguisher")
+            return
+        if agent.kind == "custodian" and agent.phase == "to_extinguisher" and pos == agent.target:
+            agent.phase = "suppressing_fire"
+            agent.wait_until = self.time + 5
+            self.add_event("extinguisher", f"Custodian {agent.agent_id} started reducing fire damage")
             return
         if pos in {FRONT_EXIT, BACK_EXIT}:
             self.try_exit(agent, "front" if pos == FRONT_EXIT else "back")
@@ -860,16 +1073,16 @@ class Simulation:
             if other_agents_left:
                 return
 
-        # Check if a custodian is at this exit door holding it
+        # Check if a student assistant is at this exit door holding it
         door_cell = FRONT_EXIT if door == "front" else BACK_EXIT
-        custodian_holding = any(
-            a.kind == "custodian"
+        assistant_holding = any(
+            a.kind == "assistant"
             and (a.x, a.y) == door_cell
             and not a.exited
             for a in self.agents
         )
 
-        if custodian_holding:
+        if assistant_holding:
             # Door held open — only one person can squeeze through per step
             pressure = 0.0
             self.door_cooldown[door] = self.time + 1  # one-at-a-time throughput
@@ -887,7 +1100,7 @@ class Simulation:
             return
         agent.exited = True
         # After each exit, small throughput gap (shoulder-width squeeze)
-        if not custodian_holding:
+        if not assistant_holding:
             self.door_cooldown[door] = self.time + 1
 
     def summary(self) -> dict[str, int]:
@@ -897,4 +1110,5 @@ class Simulation:
             "trips": self.trips,
             "door_collisions": self.door_collisions,
             "max_heat": max(self.heatmap.values(), default=0),
+            "fire_damage": self.fire_damage,
         }
