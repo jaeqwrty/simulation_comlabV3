@@ -219,10 +219,3 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 def read_index():
     return FileResponse(STATIC_DIR / "index.html")
 
-@app.get("/app.css")
-def read_css():
-    return FileResponse(STATIC_DIR / "app.css")
-
-@app.get("/app.js")
-def read_js():
-    return FileResponse(STATIC_DIR / "app.js")
