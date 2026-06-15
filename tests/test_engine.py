@@ -11,6 +11,7 @@ from comlab_v3.engine import (
     FIRE_EXTINGUISHERS,
     FRONT_EXIT,
     INSTRUCTOR_DESK,
+    MODIFIED_LOCKER,
     SERVICE_BAY_PASSAGE,
     SHELVES,
     Simulation,
@@ -28,7 +29,7 @@ SCENARIOS = [
     (mode, panic, fire_origin)
     for mode in ("current", "modified")
     for panic in (True, False)
-    for fire_origin in ("data", "desk")
+    for fire_origin in ("data", "desk", "workstation", "locker", "shelves", "assistant")
 ]
 
 
@@ -45,41 +46,6 @@ class SimulationValidationTests(unittest.TestCase):
                 sim = self.run_to_completion(mode, panic, fire_origin)
                 self.assertEqual(sim.summary()["evacuated"], len(sim.agents))
                 self.assertLess(sim.time, 370)
-
-    def test_modified_layout_is_faster_than_current_for_same_conditions(self):
-        for panic in (True, False):
-            for fire_origin in ("data", "desk"):
-                with self.subTest(panic=panic, fire_origin=fire_origin):
-                    current = self.run_to_completion("current", panic, fire_origin)
-                    modified = self.run_to_completion("modified", panic, fire_origin)
-        self.assertNotIn(11, {y for _, y in WORKSTATIONS})
-
-    def test_layout_matches_reference_sketch_service_zones(self):
-        self.assertEqual(INSTRUCTOR_DESK, {(6, 0)})
-        self.assertEqual(DATA_RACKS, {(7, y) for y in range(2, 7)})
-        self.assertEqual(STUDENT_ASSISTANT_DESK, {(7, y) for y in range(7, 10)})
-        self.assertEqual(EXTRA_PCS, {(x, 11) for x in range(4)})
-        self.assertEqual(SHELVES, {(7, 11)})
-        self.assertEqual(fire_origin_for("desk"), (6, 0))
-        self.assertEqual(fire_origin_for("data"), (7, 4))
-
-    def test_professor_starts_at_instructor_desk_before_simulation_runs(self):
-        sim = Simulation("current", panic=True, fire_origin="data")
-        instructor = next(agent for agent in sim.agents if agent.agent_id == "I01")
-        self.assertEqual(sim.time, 0)
-        self.assertEqual((instructor.x, instructor.y), next(iter(INSTRUCTOR_DESK)))
-        self.assertEqual(instructor.phase, "waiting")
-
-    def test_professor_emergency_protocol(self):
-        sim = Simulation("modified", panic=True, fire_origin="data")
-        instructor = next(agent for agent in sim.agents if agent.agent_id == "I01")
-
-        sim.step()
-        self.assertEqual(instructor.phase, "to_extinguisher")
-
-        while instructor.phase == "to_extinguisher" and not sim.completed:
-            sim.step()
-        self.assertEqual(instructor.phase, "retrieving_extinguisher")
 
     def test_modified_layout_is_faster_than_current_for_same_conditions(self):
         for panic in (True, False):
@@ -111,6 +77,14 @@ class SimulationValidationTests(unittest.TestCase):
         self.assertEqual(SHELVES, {(7, 11)})
         self.assertEqual(fire_origin_for("desk"), (6, 0))
         self.assertEqual(fire_origin_for("data"), (7, 4))
+        self.assertEqual(fire_origin_for("workstation"), (2, 5))
+        self.assertEqual(fire_origin_for("locker"), (7, 11))
+        self.assertEqual(fire_origin_for("shelves"), (7, 11))
+        self.assertEqual(fire_origin_for("assistant"), (7, 8))
+        self.assertEqual(fire_origin_for("data", "modified"), (0, 7))
+        self.assertEqual(fire_origin_for("locker", "modified"), MODIFIED_LOCKER)
+        self.assertEqual(fire_origin_for("shelves", "modified"), MODIFIED_LOCKER)
+        self.assertEqual(fire_origin_for("assistant", "modified"), (0, 8))
 
     def test_professor_starts_at_instructor_desk_before_simulation_runs(self):
         sim = Simulation("current", panic=True, fire_origin="data")
@@ -131,6 +105,10 @@ class SimulationValidationTests(unittest.TestCase):
         self.assertEqual(instructor.phase, "retrieving_extinguisher")
 
         while instructor.phase == "retrieving_extinguisher" and not sim.completed:
+            sim.step()
+        self.assertEqual(instructor.phase, "suppressing_fire")
+
+        while instructor.phase == "suppressing_fire" and not sim.completed:
             sim.step()
         self.assertEqual(instructor.phase, "evacuating")
 
@@ -157,20 +135,70 @@ class SimulationValidationTests(unittest.TestCase):
                 density = sim.density_map()
 
                 expected_targets = {
-                    "PA1": sim.assistant_aid_posts["front"],
-                    "PA2": sim.assistant_aid_posts["back"],
-                    "LC1": FRONT_EXIT,
-                    "LC2": BACK_EXIT,
+                    "PA1": FRONT_EXIT,
+                    "PA2": BACK_EXIT,
                 }
 
-                for agent_id, target in expected_targets.items():
+                for agent_id in ("PA1", "PA2", "LC1", "LC2"):
                     with self.subTest(agent_id=agent_id):
                         agent = next(item for item in sim.agents if item.agent_id == agent_id)
                         agent.x, agent.y = (1 if mode == "modified" else 6), sim.service_bay_passage[1]
                         agent.wait_until = 0
                         agent.bay_passage_cleared = True
-                        agent.phase = "aiding_students" if agent.kind == "assistant" else "holding_door"
+                        agent.phase = "holding_door" if agent.kind == "assistant" else "to_extinguisher"
+                        target = expected_targets.get(agent_id, sim.emergency_extinguisher_for(agent))
                         self.assertEqual(sim.target_for(agent, density), target)
+
+    def test_student_assistants_hold_doors_and_reduce_collisions(self):
+        sim = Simulation("current", panic=True, fire_origin="data")
+        assistant = next(agent for agent in sim.agents if agent.agent_id == "PA1")
+        student = next(agent for agent in sim.agents if agent.kind == "student")
+
+        assistant.x, assistant.y = FRONT_EXIT
+        assistant.phase = "holding_door"
+        student.x, student.y = FRONT_EXIT
+        student.wait_until = 0
+        student.phase = "evacuating"
+
+        sim.try_exit(student, "front")
+
+        self.assertTrue(student.exited)
+        self.assertEqual(sim.door_collisions, 0)
+
+    def test_custodians_suppress_fire_then_assist_students(self):
+        sim = Simulation("modified", panic=True, fire_origin="data")
+        custodian = next(agent for agent in sim.agents if agent.agent_id == "LC1")
+        custodian.target = sim.emergency_extinguisher_for(custodian)
+        custodian.x, custodian.y = custodian.target
+        custodian.phase = "to_extinguisher"
+        custodian.wait_until = 0
+
+        sim.handle_arrival(custodian)
+        self.assertEqual(custodian.phase, "suppressing_fire")
+
+        custodian.wait_until = sim.time
+        sim.step()
+        self.assertEqual(custodian.phase, "aiding_students")
+
+    def test_panic_prone_students_have_slower_realistic_reactions(self):
+        sim = Simulation("current", panic=True, fire_origin="data")
+        panic_prone = [agent for agent in sim.agents if agent.kind == "student" and agent.panic_prone]
+        steady = [agent for agent in sim.agents if agent.kind == "student" and not agent.panic_prone]
+
+        self.assertTrue(panic_prone)
+        self.assertTrue(steady)
+        self.assertLess(max(agent.mobility_factor for agent in panic_prone), max(agent.mobility_factor for agent in steady))
+
+    def test_fire_spreads_through_electrical_and_congested_lab_cells(self):
+        sim = Simulation("current", panic=True, fire_origin="workstation")
+        initial = set(sim.active_fire_cells)
+
+        for _ in range(30):
+            sim.step()
+
+        self.assertGreater(len(sim.active_fire_cells), len(initial))
+        self.assertTrue(any(cell in sim.workstations_set | sim.data_racks | sim.extra_pcs for cell in sim.active_fire_cells))
+        self.assertGreater(sim.summary()["fire_damage"], 0)
 
     def test_hallway_wall_blocks_non_exit_cells(self):
         """Column 8 should be impassable except at exit doors."""
@@ -189,6 +217,40 @@ class SimulationValidationTests(unittest.TestCase):
         self.assertEqual(EXTINGUISHER_PROFESSOR, (7, 0))
         self.assertEqual(EXTINGUISHER_ASSISTANT, (6, 9))
         self.assertEqual(EXTINGUISHER_SHELVES, (6, 11))
+
+    def test_modified_layout_keeps_three_computer_tables_and_clear_storage(self):
+        sim = Simulation("modified", panic=True, fire_origin="data")
+        self.assertEqual(sim.storage, MODIFIED_LOCKER)
+        self.assertEqual(sim.locker, MODIFIED_LOCKER)
+        self.assertEqual(sim.shelves, {MODIFIED_LOCKER})
+        self.assertFalse(sim.extra_pcs)
+
+        for row in sim.workstation_rows:
+            left_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {1, 2, 3}]
+            right_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {5, 6, 7}]
+            self.assertEqual(len(left_table), 3)
+            self.assertEqual(len(right_table), 3)
+
+    def test_modified_extinguishers_are_reachable_from_staff_passage(self):
+        sim = Simulation("modified", panic=True, fire_origin="data")
+        self.assertEqual(sim.fire_extinguishers, ((4, 0), (1, 10), (2, 11)))
+
+        cleared_edges = sim.path_edges_for("custodian", bay_passage_cleared=True)
+        staff_start = (1, sim.service_bay_passage[1])
+        for extinguisher in sim.fire_extinguishers:
+            with self.subTest(extinguisher=extinguisher):
+                path = find_path(
+                    staff_start,
+                    extinguisher,
+                    sim.blocked_cells,
+                    "custodian",
+                    cleared_edges,
+                    sim.fire_origin,
+                    sim.workstations_set,
+                    sim.service_bay_staff,
+                    "modified",
+                )
+                self.assertTrue(path or staff_start == extinguisher)
 
     def test_agents_move_one_adjacent_cell_per_step(self):
         sim = Simulation("modified", panic=False, fire_origin="data")
@@ -233,7 +295,7 @@ class SimulationValidationTests(unittest.TestCase):
                     lc1.x, lc1.y = 6, 0
                     self.assertIsNone(staff_bay_waypoint(lc1, mode), "lab-side col 6 must not reroute back into the bay")
                 else:
-                    self.assertEqual(staff_bay_waypoint(lc1, mode), (0, 4))
+                    self.assertEqual(staff_bay_waypoint(lc1, mode), (0, 7))
                     self.assertEqual(staff_bay_waypoint(pa1, mode), (0, 9))
 
                     lc1.x, lc1.y = 0, 6
