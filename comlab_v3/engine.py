@@ -85,6 +85,8 @@ class Agent:
     bay_passage_cleared: bool = False  # staff used the (7,10)->(6,10) passage gap
     panic_prone: bool = False
     mobility_factor: float = 1.0
+    wait_time: int = 0
+    exit_time: int | None = None
 
 
 
@@ -406,6 +408,7 @@ class Simulation:
         self.active_fire_cells: set[tuple[int, int]] = {self.fire_origin}
         self.door_cooldown = {"front": 0, "back": 0}
         self.heatmap: dict[str, int] = {}
+        self.queue_lengths: list[int] = []
         self.rate = [(0, 0)]
         self.events: list[tuple[int, str, str]] = []
         self.completed = False
@@ -618,6 +621,16 @@ class Simulation:
                 density[pos] = density.get(pos, 0) + 1
         return density
 
+    def queue_length(self) -> int:
+        aisle_col = 4 if self.mode == "modified" else 3
+        queue_cells = {(aisle_col, y) for y in range(ROWS)}
+        queue_cells.update({FRONT_EXIT, BACK_EXIT, (7, 0), (7, 1), (7, 10), (7, 11)})
+        return sum(
+            1
+            for agent in self.agents
+            if not agent.exited and (agent.x, agent.y) in queue_cells
+        )
+
     def choose_exit(self, agent: Agent, density: dict[tuple[int, int], int]) -> tuple[int, int]:
         if agent.behavior == "locker" and agent.visited_locker:
             preferred = FRONT_EXIT if self.mode == "modified" else BACK_EXIT
@@ -815,6 +828,10 @@ class Simulation:
         for pos, count in density.items():
             density_key = f"{pos[0]},{pos[1]}"
             self.heatmap[density_key] = self.heatmap.get(density_key, 0) + count
+        previous_positions = {
+            agent.agent_id: ((agent.x, agent.y), agent.exited)
+            for agent in self.agents
+        }
 
         suppressors = sum(
             1
@@ -1056,6 +1073,11 @@ class Simulation:
                 if agent.kind in {"assistant", "custodian"} and not agent.exited:
                     agent.exited = True
             evacuated = len(self.agents)
+        for agent in self.agents:
+            previous_pos, was_exited = previous_positions[agent.agent_id]
+            if not was_exited and not agent.exited and (agent.x, agent.y) == previous_pos:
+                agent.wait_time += 1
+        self.queue_lengths.append(self.queue_length())
         self.rate.append((self.time, evacuated))
         if evacuated == len(self.agents) or self.time >= 400:  # extended max steps for realistic slow evacuation
             self.completed = True
@@ -1131,16 +1153,36 @@ class Simulation:
             self.add_event("door", f"{door.title()} door jam — {jam_duration} step blockage")
             return
         agent.exited = True
+        agent.exit_time = self.time
         # After each exit, small throughput gap (shoulder-width squeeze)
         if not assistant_holding:
             self.door_cooldown[door] = self.time + 1
 
-    def summary(self) -> dict[str, int]:
+    def summary(self) -> dict[str, int | float]:
+        total_agents = len(self.agents)
+        evacuated = sum(1 for agent in self.agents if agent.exited)
+        average_wait = (
+            sum(agent.wait_time for agent in self.agents) / total_agents
+            if total_agents
+            else 0
+        )
+        average_queue = (
+            sum(self.queue_lengths) / len(self.queue_lengths)
+            if self.queue_lengths
+            else 0
+        )
+        throughput_per_minute = (evacuated / self.time * 60) if self.time else 0
+        exit_utilization = (evacuated / (self.time * 2) * 100) if self.time else 0
         return {
             "time": self.time,
-            "evacuated": sum(1 for agent in self.agents if agent.exited),
+            "evacuated": evacuated,
             "trips": self.trips,
             "door_collisions": self.door_collisions,
             "max_heat": max(self.heatmap.values(), default=0),
             "fire_damage": self.fire_damage,
+            "average_wait_time": round(average_wait, 2),
+            "average_queue_length": round(average_queue, 2),
+            "throughput_per_minute": round(throughput_per_minute, 2),
+            "exit_utilization_percent": round(exit_utilization, 2),
+            "processing_time": self.time,
         }

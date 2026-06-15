@@ -47,6 +47,25 @@ class SimulationValidationTests(unittest.TestCase):
                 self.assertEqual(sim.summary()["evacuated"], len(sim.agents))
                 self.assertLess(sim.time, 370)
 
+    def test_summary_reports_presentation_metrics(self):
+        sim = self.run_to_completion("current", panic=True, fire_origin="data")
+        summary = sim.summary()
+
+        expected_keys = {
+            "average_wait_time",
+            "average_queue_length",
+            "throughput_per_minute",
+            "exit_utilization_percent",
+            "processing_time",
+        }
+        self.assertTrue(expected_keys.issubset(summary))
+        self.assertEqual(summary["processing_time"], summary["time"])
+        self.assertGreater(summary["average_wait_time"], 0)
+        self.assertGreater(summary["average_queue_length"], 0)
+        self.assertGreater(summary["throughput_per_minute"], 0)
+        self.assertGreater(summary["exit_utilization_percent"], 0)
+        self.assertLessEqual(summary["exit_utilization_percent"], 100)
+
     def test_modified_layout_is_faster_than_current_for_same_conditions(self):
         for panic in (True, False):
             for fire_origin in ("data", "desk"):

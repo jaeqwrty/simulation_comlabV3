@@ -141,6 +141,7 @@ class SimulationService:
             for agent in sim.agents
         ]
         active = sum(1 for agent in sim.agents if not agent.exited)
+        summary = sim.summary()
         return {
             "running": self.running,
             "mode": self.mode,
@@ -155,7 +156,12 @@ class SimulationService:
             "trips": sim.trips,
             "doorCollisions": sim.door_collisions,
             "fireDamage": sim.fire_damage,
-            "maxHeat": max(sim.heatmap.values(), default=0),
+            "maxHeat": summary["max_heat"],
+            "avgWait": summary["average_wait_time"],
+            "avgQueueLength": summary["average_queue_length"],
+            "throughputPerMinute": summary["throughput_per_minute"],
+            "exitUtilizationPercent": summary["exit_utilization_percent"],
+            "processingTime": summary["processing_time"],
             "completed": sim.completed,
             "agents": agents,
             "heatmap": sim.heatmap,

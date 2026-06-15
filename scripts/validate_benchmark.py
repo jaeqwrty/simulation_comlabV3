@@ -91,12 +91,14 @@ def benchmark(iterations: int):
 
 def print_validation(rows):
     print("Validation")
-    print("mode      panic  fire  time  evacuated  trips  doors  max_heat")
+    print("mode      panic  fire  time  evacuated  avg_wait  avg_queue  throughput  util_pct  trips  doors  max_heat")
     for row in rows:
         print(
             f"{row['mode']:<9} {str(row['panic']):<5}  {row['fire_origin']:<4}  "
-            f"{row['time']:>4}  {row['evacuated']:>9}  {row['trips']:>5}  "
-            f"{row['door_collisions']:>5}  {row['max_heat']:>8}"
+            f"{row['time']:>4}  {row['evacuated']:>9}  "
+            f"{row['average_wait_time']:>8.2f}  {row['average_queue_length']:>9.2f}  "
+            f"{row['throughput_per_minute']:>10.2f}  {row['exit_utilization_percent']:>8.2f}  "
+            f"{row['trips']:>5}  {row['door_collisions']:>5}  {row['max_heat']:>8}"
         )
 
 
