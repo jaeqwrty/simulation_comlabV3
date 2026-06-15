@@ -248,20 +248,53 @@ class SimulationValidationTests(unittest.TestCase):
         self.assertEqual(sim.service_bay_passage, (6, 11))
         self.assertNotIn(sim.storage, sim.data_racks | sim.service_bay_staff)
         self.assertEqual(len(sim.workstations), 36)
-        self.assertEqual(sim.workstation_rows, (1, 2, 4, 5, 7))
+        self.assertEqual(sim.workstation_rows, (1, 2, 4, 5, 7, 8))
         self.assertFalse(any((x, 7) in sim.workstations_set for x in {4, 5, 6, 7}))
+        self.assertFalse(any((4, y) in sim.workstations_set for y in range(12)))
 
         table_count = 0
         for row in sim.workstation_rows:
             left_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {0, 1, 2, 3}]
-            right_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {4, 5, 6, 7}]
+            right_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {5, 6, 7}]
             if left_table:
                 self.assertEqual(len(left_table), 4)
                 table_count += 1
             if right_table:
-                self.assertEqual(len(right_table), 4)
+                self.assertNotIn(4, {x for x, _ in right_table})
                 table_count += 1
-        self.assertEqual(table_count, 9)
+        self.assertEqual(table_count, 11)
+
+    def test_modified_student_paths_use_center_aisle_not_workstations(self):
+        sim = Simulation("modified", panic=False, fire_origin="data")
+        for seat in [(0, 1), (3, 1), (5, 1), (7, 5), (2, 8)]:
+            with self.subTest(seat=seat):
+                agent = next(item for item in sim.agents if (item.x, item.y) == seat)
+                agent.wait_until = 0
+                target = sim.target_for(agent, sim.density_map())
+                self.assertEqual(target[0], 4, msg=f"{seat} should first aim for the open center aisle")
+                path = sim.find_agent_path(seat, target, "student", agent)
+                self.assertTrue(path, msg=f"{seat} should have a route to the marked exit")
+                self.assertIn(target, path, msg=f"{seat} should route through the open center aisle")
+                self.assertFalse(
+                    any(cell in sim.workstations_set for cell in path),
+                    msg=f"{seat} route crosses workstation/computer cells: {path}",
+                )
+
+    def test_modified_students_prefer_exit_door_over_entrance_door_when_safe(self):
+        sim = Simulation("modified", panic=False, fire_origin="data")
+        for agent in sim.agents:
+            if agent.kind == "student":
+                agent.wait_until = 0
+
+        while not sim.completed and sim.time < 220:
+            sim.step()
+
+        students = [agent for agent in sim.agents if agent.kind == "student"]
+        self.assertTrue(all(agent.exited for agent in students))
+        self.assertFalse(
+            any((agent.x, agent.y) == BACK_EXIT for agent in students),
+            "Modified-layout students should not use the entrance door when the EXIT door is safe",
+        )
 
     def test_modified_extinguishers_are_reachable_from_staff_passage(self):
         sim = Simulation("modified", panic=True, fire_origin="data")
@@ -403,7 +436,8 @@ class SimulationValidationTests(unittest.TestCase):
                         illegal = [
                             (full_path[i], full_path[i + 1])
                             for i in range(len(full_path) - 1)
-                            if full_path[i][1] == 11
+                            if full_path[i][0] < 9
+                            and full_path[i][1] == 11
                             and full_path[i + 1][1] == 10
                             and full_path[i][0] != 6
                         ]
@@ -467,7 +501,7 @@ class SimulationValidationTests(unittest.TestCase):
                         if start == end:
                             continue
                         if mode == "modified":
-                            if start[1] == 11 and end[1] == 10 and start[0] != sim.service_bay_passage[0]:
+                            if start[0] < 9 and start[1] == 11 and end[1] == 10 and start[0] != sim.service_bay_passage[0]:
                                 illegal.append((sim.time, agent.agent_id, start, end))
                         else:
                             bay_col = 7

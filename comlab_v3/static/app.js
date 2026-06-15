@@ -89,12 +89,17 @@ window.addEventListener("error", (event) => {
 function layoutFor(mode = "current", fireOrigin = "data") {
   const modified = mode === "modified";
   const workstations = [];
-  const rows = modified ? [1, 2, 4, 5, 7] : [1, 2, 4, 5, 7, 8];
+  const rows = modified ? [1, 2, 4, 5, 7, 8] : [1, 2, 4, 5, 7, 8];
   if (modified) {
     [1, 2, 4, 5].forEach((y) => {
-      [0, 1, 2, 3, 4, 5, 6, 7].forEach((x) => workstations.push([x, y]));
+      [0, 1, 2, 3, 5, 6, 7].forEach((x) => {
+        if (!(y === 1 && (x === 6 || x === 7))) workstations.push([x, y]);
+      });
     });
-    [0, 1, 2, 3].forEach((x) => workstations.push([x, 7]));
+    [7, 8].forEach((y) => {
+      [0, 1, 2, 3].forEach((x) => workstations.push([x, y]));
+    });
+    workstations.push([5, 8], [6, 8]);
   } else {
     const cols = [0, 1, 2, 4, 5, 6];
     rows.forEach((y) => cols.forEach((x) => workstations.push([x, y])));
@@ -1248,7 +1253,7 @@ function drawWorkstationBenches(ctx, layout) {
       const y = visualCenter(0, row).y;
       const rowCells = layout.workstations.filter(([, cellY]) => cellY === row);
       const hasLeftTable = rowCells.some(([x]) => x >= 0 && x <= 3);
-      const hasRightTable = rowCells.some(([x]) => x >= 4 && x <= 7);
+      const hasRightTable = rowCells.some(([x]) => x >= 5 && x <= 7);
 
       if (hasLeftTable) {
         ctx.beginPath();
@@ -1259,7 +1264,7 @@ function drawWorkstationBenches(ctx, layout) {
 
       if (hasRightTable) {
         ctx.beginPath();
-        ctx.moveTo(200, y);
+        ctx.moveTo(234, y);
         ctx.lineTo(344, y);
         ctx.stroke();
       }
@@ -1561,7 +1566,7 @@ function drawMap() {
       if (state && state.mode === "modified") {
         const rowCells = layout.workstations.filter(([, cellY]) => cellY === row);
         const hasLeftTable = rowCells.some(([x]) => x >= 0 && x <= 3);
-        const hasRightTable = rowCells.some(([x]) => x >= 4 && x <= 7);
+        const hasRightTable = rowCells.some(([x]) => x >= 5 && x <= 7);
 
         if (hasLeftTable) {
           ctx.beginPath();
@@ -1572,7 +1577,7 @@ function drawMap() {
 
         if (hasRightTable) {
           ctx.beginPath();
-          ctx.moveTo(210, y);
+          ctx.moveTo(244, y);
           ctx.lineTo(342, y);
           ctx.stroke();
         }

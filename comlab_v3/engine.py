@@ -283,13 +283,15 @@ def is_obstacle(
     x, y = pos
     if not (0 <= x < COLS and 0 <= y < ROWS):
         return True
-    if x >= LAB_COLS or pos in {FRONT_EXIT, BACK_EXIT}:
-        return False
+    if pos in {FRONT_EXIT, BACK_EXIT}:
+        return pos in blocked_cells
+    if x >= LAB_COLS:
+        return pos in blocked_cells
     if is_service_bay_staff(agent_kind) and pos == staff_fire_passable:
         return False
     if is_service_bay_staff(agent_kind) and pos in staff_bay_cells:
         return False
-    return (pos in blocked_cells) and (pos not in workstations_set)
+    return pos in blocked_cells or pos in workstations_set
 
 
 def neighbors(
@@ -303,11 +305,13 @@ def neighbors(
     mode: str = "current",
 ) -> list[tuple[int, int]]:
     x, y = pos
-    workstation_cols = {0, 1, 2, 3, 4, 5, 6, 7} if mode == "modified" else {0, 1, 2, 4, 5, 6}
-    vertical_lanes = {3, 4, 7} if mode == "modified" else set()
+    workstation_cols = {0, 1, 2, 3, 5, 6, 7} if mode == "modified" else {0, 1, 2, 4, 5, 6}
+    vertical_lanes = {4, 7} if mode == "modified" else {3}
     staff_col = 6 if mode == "modified" else 6
 
-    if x in workstation_cols:
+    if pos in workstations_set:
+        candidates = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    elif x in workstation_cols:
         candidates = [(x + 1, y), (x - 1, y)]
         if x in vertical_lanes or (is_service_bay_staff(agent_kind) and x == staff_col and y in {9, 10, 11}):
             candidates.extend([(x, y + 1), (x, y - 1)])
@@ -371,12 +375,13 @@ class Simulation:
         
         # Configure layout properties dynamically based on mode
         if mode == "modified":
-            self.workstation_rows = (1, 2, 4, 5, 7)
+            self.workstation_rows = (1, 2, 4, 5, 7, 8)
             self.workstations = [
                 (x, y)
                 for y in (1, 2, 4, 5)
-                for x in range(8)
-            ] + [(x, 7) for x in range(4)]
+                for x in (0, 1, 2, 3, 5, 6, 7)
+                if (x, y) not in {(6, 1), (7, 1)}
+            ] + [(x, y) for y in (7, 8) for x in range(4)] + [(5, 8), (6, 8)]
             self.workstations_set = set(self.workstations)
             self.data_racks = {(0, 11), (1, 11), (2, 11)}
             self.student_assistant_desk = {(3, 11), (4, 11), (5, 11)}
@@ -546,6 +551,8 @@ class Simulation:
         blocked_cells = self.blocked_cells
         if agent_kind == "student":
             blocked_cells = set(self.blocked_cells) | (self.active_fire_cells - {start, target})
+            if self.mode == "modified" and target != BACK_EXIT:
+                blocked_cells.add(BACK_EXIT)
         path = find_path(
             start,
             target,
@@ -559,6 +566,8 @@ class Simulation:
         )
         if path or agent_kind != "student":
             return path
+        if self.mode == "modified":
+            return []
         return find_path(
             start,
             target,
@@ -661,6 +670,15 @@ class Simulation:
         )
 
     def choose_exit(self, agent: Agent, density: dict[tuple[int, int], int]) -> tuple[int, int]:
+        if self.mode == "modified" and agent.kind == "student":
+            current = (agent.x, agent.y)
+            front_path = self.find_agent_path(current, FRONT_EXIT, agent.kind, agent)
+            if front_path or current == FRONT_EXIT:
+                return FRONT_EXIT
+            if self.distance_to_fire(FRONT_EXIT) <= 2 and self.find_agent_path(current, BACK_EXIT, agent.kind, agent):
+                return BACK_EXIT
+            return FRONT_EXIT
+
         if self.mode == "modified" and self.fire_origin_name == "assistant":
             return FRONT_EXIT
 
