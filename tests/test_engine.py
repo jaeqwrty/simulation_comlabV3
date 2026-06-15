@@ -278,17 +278,70 @@ class SimulationValidationTests(unittest.TestCase):
                 target = sim.target_for(agent, sim.density_map())
                 path = sim.find_agent_path(seat, target, "student", agent)
                 self.assertTrue(path, msg=f"{seat} should have a route to the marked exit")
-                own_table_cols = {0, 1, 2, 3} if seat[0] <= 3 else {4, 5, 6, 7}
+                own_table_cols = {0, 1, 2, 3} if seat[0] <= 3 else {5, 6, 7}
                 own_table = {
                     cell
-                    for cell in sim.workstations_set
+                    for cell in sim.table_cells
                     if cell[1] == seat[1] and cell[0] in own_table_cols
                 }
-                center_aisle = {cell for cell in sim.workstations_set if cell[0] == 4}
                 self.assertFalse(
-                    any(cell in sim.workstations_set and cell not in own_table and cell not in center_aisle for cell in path),
+                    any(cell in sim.table_cells and cell not in own_table for cell in path),
                     msg=f"{seat} route crosses unrelated workstation/computer cells: {path}",
                 )
+
+    def test_student_paths_do_not_jump_vertically_through_workstation_tables(self):
+        for mode in ("current", "modified"):
+            with self.subTest(mode=mode):
+                sim = Simulation(mode, panic=False, fire_origin="data")
+                for agent in sim.agents:
+                    if agent.kind != "student":
+                        continue
+                    agent.wait_until = 0
+                    start = (agent.x, agent.y)
+                    target = sim.target_for(agent, sim.density_map())
+                    route = [start] + sim.find_agent_path(start, target, agent.kind, agent)
+                    illegal = [
+                        (route[index], route[index + 1])
+                        for index in range(len(route) - 1)
+                        if route[index] in sim.table_cells
+                        and route[index + 1] in sim.table_cells
+                        and route[index][0] == route[index + 1][0]
+                    ]
+                    self.assertFalse(illegal, msg=f"{agent.agent_id} jumped through a table in {mode}: {illegal}")
+
+    def test_student_runtime_moves_do_not_skip_over_workstation_tables(self):
+        for mode in ("current", "modified"):
+            with self.subTest(mode=mode):
+                sim = Simulation(mode, panic=False, fire_origin="data")
+                for agent in sim.agents:
+                    if agent.kind == "student":
+                        agent.wait_until = 0
+
+                for _ in range(120):
+                    before = {
+                        agent.agent_id: (agent.x, agent.y)
+                        for agent in sim.agents
+                        if agent.kind == "student" and not agent.exited
+                    }
+                    sim.step()
+                    for agent in sim.agents:
+                        if agent.kind != "student" or agent.agent_id not in before or agent.exited:
+                            continue
+                        previous = before[agent.agent_id]
+                        current = (agent.x, agent.y)
+                        if previous == current:
+                            continue
+                        self.assertLessEqual(
+                            abs(previous[0] - current[0]) + abs(previous[1] - current[1]),
+                            1,
+                            msg=f"{agent.agent_id} skipped cells in {mode}: {previous} -> {current}",
+                        )
+                        self.assertFalse(
+                            previous in sim.table_cells
+                            and current in sim.table_cells
+                            and previous[0] == current[0],
+                            msg=f"{agent.agent_id} jumped through workstation table in {mode}: {previous} -> {current}",
+                        )
 
     def test_modified_shelf_bound_students_exit_through_entrance_door(self):
         sim = Simulation("modified", panic=False, fire_origin="data")
