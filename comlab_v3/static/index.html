@@ -192,11 +192,11 @@
         <article class="evidence-card">
           <h3>Process Flow</h3>
           <ol class="flow-list">
-            <li>Configure layout, panic mode, fire origin, and speed.</li>
-            <li>Initialize agents, roles, delays, targets, and blocked cells.</li>
-            <li>Advance one-second event steps with pathfinding and density checks.</li>
-            <li>Update queues, heatmap, incidents, exits, and output metrics.</li>
-            <li>Stop when all agents evacuate or the cutoff is reached.</li>
+            <li><strong>Incident trigger:</strong> Fire and smoke initiate, and agents enter behavioral reaction delays.</li>
+            <li><strong>Pre-evacuation:</strong> Agents pack up, wait for peers, or (if staff) retrieve fire extinguishers.</li>
+            <li><strong>Service detour:</strong> Locker-bound agents detour to the service zone to retrieve belongings.</li>
+            <li><strong>Movement:</strong> Agents pathfind to assigned exits, slowed by smoke and crowd density.</li>
+            <li><strong>Evacuation:</strong> Agents navigate bottlenecks, trips, and door jams to successfully exit.</li>
           </ol>
         </article>
 

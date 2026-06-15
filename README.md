@@ -96,6 +96,12 @@ Actual observed arrival and service data is unavailable, so the model uses deter
 | File | Purpose |
 | --- | --- |
 | `run.py` | Main entry point to launch the simulation and web server. |
+
+## Key Files
+
+| File | Purpose |
+| --- | --- |
+| `run.py` | Main entry point to launch the simulation and web server. |
 | `comlab_v3/engine.py` | Core agent-based simulation engine. |
 | `comlab_v3/web.py` | Web server providing the user interface. |
 | `comlab_v3/static/` | Frontend HTML, CSS, and JavaScript for the UI. |
@@ -106,13 +112,13 @@ Actual observed arrival and service data is unavailable, so the model uses deter
 
 ```mermaid
 flowchart LR
-  A["Configure scenario"] --> B["Initialize agents"]
-  B --> C["Assign behavior and exits"]
-  C --> D["Pathfind around blocked cells"]
-  D --> E["Step movement, congestion, trips, doors"]
-  E --> F{"All agents evacuated?"}
-  F -- "No" --> E
-  F -- "Yes" --> G["Summarize metrics"]
+  A["Incident Trigger (Fire/Smoke)"] --> B["Pre-evacuation Delays"]
+  B --> C["Service Detours (Lockers)"]
+  C --> D["Pathfinding & Egress Movement"]
+  D --> E["Congestion, Trips, & Door Jams"]
+  E --> F{"Agent Exited?"}
+  F -- "No" --> D
+  F -- "Yes" --> G["Evacuation Complete"]
 ```
 
 ## Latest Local Validation
