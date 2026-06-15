@@ -100,10 +100,10 @@ class SimulationValidationTests(unittest.TestCase):
         self.assertEqual(fire_origin_for("locker"), (7, 11))
         self.assertEqual(fire_origin_for("shelves"), (7, 11))
         self.assertEqual(fire_origin_for("assistant"), (7, 8))
-        self.assertEqual(fire_origin_for("data", "modified"), (0, 7))
+        self.assertEqual(fire_origin_for("data", "modified"), (1, 11))
         self.assertEqual(fire_origin_for("locker", "modified"), MODIFIED_LOCKER)
         self.assertEqual(fire_origin_for("shelves", "modified"), MODIFIED_LOCKER)
-        self.assertEqual(fire_origin_for("assistant", "modified"), (0, 8))
+        self.assertEqual(fire_origin_for("assistant", "modified"), (4, 11))
 
     def test_professor_starts_at_instructor_desk_before_simulation_runs(self):
         sim = Simulation("current", panic=True, fire_origin="data")
@@ -161,7 +161,7 @@ class SimulationValidationTests(unittest.TestCase):
                 for agent_id in ("PA1", "PA2", "LC1", "LC2"):
                     with self.subTest(agent_id=agent_id):
                         agent = next(item for item in sim.agents if item.agent_id == agent_id)
-                        agent.x, agent.y = (1 if mode == "modified" else 6), sim.service_bay_passage[1]
+                        agent.x, agent.y = ((6, 10) if mode == "modified" else (6, sim.service_bay_passage[1]))
                         agent.wait_until = 0
                         agent.bay_passage_cleared = True
                         agent.phase = "holding_door" if agent.kind == "assistant" else "to_extinguisher"
@@ -237,25 +237,36 @@ class SimulationValidationTests(unittest.TestCase):
         self.assertEqual(EXTINGUISHER_ASSISTANT, (6, 9))
         self.assertEqual(EXTINGUISHER_SHELVES, (6, 11))
 
-    def test_modified_layout_keeps_three_computer_tables_and_clear_storage(self):
+    def test_modified_layout_keeps_four_computer_tables_and_rear_service_zone(self):
         sim = Simulation("modified", panic=True, fire_origin="data")
         self.assertEqual(sim.storage, MODIFIED_LOCKER)
         self.assertEqual(sim.locker, MODIFIED_LOCKER)
         self.assertEqual(sim.shelves, {MODIFIED_LOCKER})
         self.assertFalse(sim.extra_pcs)
+        self.assertEqual(sim.data_racks, {(0, 11), (1, 11), (2, 11)})
+        self.assertEqual(sim.student_assistant_desk, {(3, 11), (4, 11), (5, 11)})
+        self.assertEqual(sim.service_bay_passage, (6, 11))
+        self.assertNotIn(sim.storage, sim.data_racks | sim.service_bay_staff)
+        self.assertEqual(len(sim.workstations), 36)
 
+        table_count = 0
         for row in sim.workstation_rows:
-            left_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {1, 2, 3}]
-            right_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {5, 6, 7}]
-            self.assertEqual(len(left_table), 3)
-            self.assertEqual(len(right_table), 3)
+            left_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {0, 1, 2, 3}]
+            right_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {4, 5, 6, 7}]
+            if left_table:
+                self.assertEqual(len(left_table), 4)
+                table_count += 1
+            if right_table:
+                self.assertEqual(len(right_table), 4)
+                table_count += 1
+        self.assertEqual(table_count, 9)
 
     def test_modified_extinguishers_are_reachable_from_staff_passage(self):
         sim = Simulation("modified", panic=True, fire_origin="data")
-        self.assertEqual(sim.fire_extinguishers, ((4, 0), (1, 10), (2, 11)))
+        self.assertEqual(sim.fire_extinguishers, ((4, 0), (6, 10), (7, 10)))
 
         cleared_edges = sim.path_edges_for("custodian", bay_passage_cleared=True)
-        staff_start = (1, sim.service_bay_passage[1])
+        staff_start = (6, 10)
         for extinguisher in sim.fire_extinguishers:
             with self.subTest(extinguisher=extinguisher):
                 path = find_path(
@@ -291,8 +302,6 @@ class SimulationValidationTests(unittest.TestCase):
                 lc1 = next(agent for agent in sim.agents if agent.agent_id == "LC1")
                 pa1 = next(agent for agent in sim.agents if agent.agent_id == "PA1")
                 
-                bay_col = 0 if mode == "modified" else 7
-                lab_col = 1 if mode == "modified" else 6
                 passage = sim.service_bay_passage
 
                 if mode == "current":
@@ -314,23 +323,26 @@ class SimulationValidationTests(unittest.TestCase):
                     lc1.x, lc1.y = 6, 0
                     self.assertIsNone(staff_bay_waypoint(lc1, mode), "lab-side col 6 must not reroute back into the bay")
                 else:
-                    self.assertEqual(staff_bay_waypoint(lc1, mode), (0, 7))
-                    self.assertEqual(staff_bay_waypoint(pa1, mode), (0, 9))
+                    self.assertEqual(staff_bay_waypoint(lc1, mode), (1, 11))
+                    self.assertEqual(staff_bay_waypoint(pa1, mode), (4, 11))
 
-                    lc1.x, lc1.y = 0, 6
-                    self.assertEqual(staff_bay_waypoint(lc1, mode), (0, 7))
+                    lc1.x, lc1.y = 2, 11
+                    self.assertEqual(staff_bay_waypoint(lc1, mode), (3, 11))
 
-                    lc1.x, lc1.y = 0, 9
+                    lc1.x, lc1.y = 3, 11
+                    self.assertEqual(staff_bay_waypoint(lc1, mode), (4, 11))
+
+                    lc1.x, lc1.y = 5, 11
                     self.assertEqual(staff_bay_waypoint(lc1, mode), passage)
 
                     lc1.x, lc1.y = passage
-                    self.assertEqual(staff_bay_waypoint(lc1, mode), (1, passage[1]))
+                    self.assertEqual(staff_bay_waypoint(lc1, mode), (6, 10))
 
-                    lc1.x, lc1.y = 1, passage[1]
+                    lc1.x, lc1.y = 6, 10
                     self.assertIsNone(staff_bay_waypoint(lc1, mode))
 
-                    lc1.x, lc1.y = 1, 0
-                    self.assertIsNone(staff_bay_waypoint(lc1, mode), "lab-side col 1 must not reroute back into the bay")
+                    lc1.x, lc1.y = 4, 0
+                    self.assertIsNone(staff_bay_waypoint(lc1, mode), "lab-side center lane must not reroute back into the bay")
 
     def test_custodian_must_exit_through_student_assistant_passage(self):
         for mode in ("current", "modified"):
@@ -354,14 +366,21 @@ class SimulationValidationTests(unittest.TestCase):
                         mode,
                     )
                     self.assertTrue(egress, msg=f"{agent_id} should reach the passage gap in {mode}")
-                    self.assertTrue(
-                        any(cell in sim.student_assistant_desk for cell in egress),
-                        msg=f"{agent_id} must pass through the student assistant zone in {mode}",
-                    )
+                    if mode == "current":
+                        self.assertTrue(
+                            any(cell in sim.student_assistant_desk for cell in egress),
+                            msg=f"{agent_id} must pass through the student assistant zone in {mode}",
+                        )
+                    else:
+                        rear_service_path = [(agent.x, agent.y)] + egress
+                        self.assertTrue(
+                            any(cell in sim.data_racks | sim.student_assistant_desk for cell in rear_service_path),
+                            msg=f"{agent_id} must pass through the rear service band in {mode}",
+                        )
                     self.assertIn(sim.service_bay_passage, egress, msg=f"{agent_id} must end at the passage gap in {mode}")
 
                     post_passage = find_path(
-                        (1 if mode == "modified" else 6, sim.service_bay_passage[1]),
+                        ((6, 10) if mode == "modified" else (6, sim.service_bay_passage[1])),
                         exit_cell,
                         sim.blocked_cells,
                         "custodian",
@@ -378,15 +397,24 @@ class SimulationValidationTests(unittest.TestCase):
                     )
 
                     full_path = egress + post_passage
-                    bay_col = 0 if mode == "modified" else 7
-                    lab_col = 1 if mode == "modified" else 6
-                    illegal = [
-                        (full_path[i], full_path[i + 1])
-                        for i in range(len(full_path) - 1)
-                        if {full_path[i], full_path[i + 1]} == frozenset({(bay_col, full_path[i][1]), (lab_col, full_path[i][1])})
-                        and full_path[i][1] in range(2, 10)
-                    ]
-                    self.assertFalse(illegal, msg=f"{agent_id} must not cross the partition except at row 10 in {mode}: {illegal}")
+                    if mode == "modified":
+                        illegal = [
+                            (full_path[i], full_path[i + 1])
+                            for i in range(len(full_path) - 1)
+                            if full_path[i][1] == 11
+                            and full_path[i + 1][1] == 10
+                            and full_path[i][0] != 6
+                        ]
+                    else:
+                        bay_col = 7
+                        lab_col = 6
+                        illegal = [
+                            (full_path[i], full_path[i + 1])
+                            for i in range(len(full_path) - 1)
+                            if {full_path[i], full_path[i + 1]} == frozenset({(bay_col, full_path[i][1]), (lab_col, full_path[i][1])})
+                            and full_path[i][1] in range(2, 10)
+                        ]
+                    self.assertFalse(illegal, msg=f"{agent_id} must not cross the partition except at the passage in {mode}: {illegal}")
 
     def test_staff_partition_edge_is_blocked_except_passage(self):
         for mode in ("current", "modified"):
@@ -396,23 +424,31 @@ class SimulationValidationTests(unittest.TestCase):
 
                 from comlab_v3.engine import is_edge_blocked
 
-                bay_col = 0 if mode == "modified" else 7
-                lab_col = 1 if mode == "modified" else 6
                 passage_y = sim.service_bay_passage[1]
 
-                for y in range(2, 10):
-                    self.assertTrue(
-                        is_edge_blocked((bay_col, y), (lab_col, y), edges),
-                        msg=f"Staff must not cross partition at row {y} in {mode}",
-                    )
-                self.assertFalse(is_edge_blocked((bay_col, passage_y), (lab_col, passage_y), edges))
+                if mode == "modified":
+                    for x in range(7):
+                        if x == sim.service_bay_passage[0]:
+                            continue
+                        self.assertTrue(
+                            is_edge_blocked((x, passage_y - 1), (x, passage_y), edges),
+                            msg=f"Staff must not cross rear partition at column {x} in {mode}",
+                        )
+                    self.assertFalse(is_edge_blocked((sim.service_bay_passage[0], passage_y - 1), (sim.service_bay_passage[0], passage_y), edges))
+                else:
+                    bay_col = 7
+                    lab_col = 6
+                    for y in range(2, 10):
+                        self.assertTrue(
+                            is_edge_blocked((bay_col, y), (lab_col, y), edges),
+                            msg=f"Staff must not cross partition at row {y} in {mode}",
+                        )
+                    self.assertFalse(is_edge_blocked((bay_col, passage_y), (lab_col, passage_y), edges))
 
     def test_staff_never_cross_partition_except_at_passage_in_simulation(self):
         for mode in ("current", "modified"):
             with self.subTest(mode=mode):
                 sim = Simulation(mode, panic=True, fire_origin="data")
-                bay_col = 0 if mode == "modified" else 7
-                lab_col = 1 if mode == "modified" else 6
                 illegal = []
                 while not sim.completed and sim.time < 400:
                     before = {
@@ -428,8 +464,14 @@ class SimulationValidationTests(unittest.TestCase):
                         end = (agent.x, agent.y)
                         if start == end:
                             continue
-                        if {start[0], end[0]} == {bay_col, lab_col} and start[1] == end[1] and start[1] in range(2, 10):
-                            illegal.append((sim.time, agent.agent_id, start, end))
+                        if mode == "modified":
+                            if start[1] == 11 and end[1] == 10 and start[0] != sim.service_bay_passage[0]:
+                                illegal.append((sim.time, agent.agent_id, start, end))
+                        else:
+                            bay_col = 7
+                            lab_col = 6
+                            if {start[0], end[0]} == {bay_col, lab_col} and start[1] == end[1] and start[1] in range(2, 10):
+                                illegal.append((sim.time, agent.agent_id, start, end))
 
                 self.assertFalse(illegal, msg=f"Staff crossed partition outside passage in {mode}: {illegal[:5]}")
 

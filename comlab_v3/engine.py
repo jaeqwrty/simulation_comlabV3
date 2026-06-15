@@ -22,7 +22,7 @@ BACK_EXIT = (8, 11)
 FRONT_STAIRS = (12, 1)
 EMERGENCY_STAIRS = (12, 11)
 CURRENT_LOCKER = (7, 11)
-MODIFIED_LOCKER = (1, 11)
+MODIFIED_LOCKER = (7, 11)
 DATA_RACKS = {(7, y) for y in range(2, 7)}
 STUDENT_ASSISTANT_DESK = {(7, y) for y in range(7, 10)}
 EXTRA_PCS = {(x, 11) for x in range(4)}
@@ -135,9 +135,9 @@ def fire_origin_for(origin: str, mode: str = "current") -> tuple[int, int]:
         elif origin in {"locker", "shelves"}:
             return storage_for(mode)
         elif origin == "assistant":
-            return (0, 8)
+            return (4, 11)
         else:  # "data"
-            return (0, 7)
+            return (1, 11)
     else:
         if origin == "desk":
             return (6, 0)
@@ -177,7 +177,7 @@ def is_service_bay_staff(agent_kind: str | None) -> bool:
 
 
 def is_staff_bay_cell(pos: tuple[int, int], mode: str = "current") -> bool:
-    staff_bay = ({(0, y) for y in range(2, 10)} | {(0, 10)}) if mode == "modified" else SERVICE_BAY_STAFF
+    staff_bay = {(x, 11) for x in range(7)} if mode == "modified" else SERVICE_BAY_STAFF
     return pos in staff_bay
 
 
@@ -187,7 +187,7 @@ def staff_bay_cleared(agent: Agent, mode: str = "current") -> bool:
         return True
     if agent.bay_passage_cleared:
         return True
-    staff_bay = ({(0, y) for y in range(2, 10)} | {(0, 10)}) if mode == "modified" else SERVICE_BAY_STAFF
+    staff_bay = {(x, 11) for x in range(7)} if mode == "modified" else SERVICE_BAY_STAFF
     return (agent.x, agent.y) not in staff_bay
 
 
@@ -197,8 +197,19 @@ def staff_bay_waypoint(agent: Agent, mode: str = "current") -> tuple[int, int] |
         return None
 
     x, y = agent.x, agent.y
-    bay_col = 0 if mode == "modified" else 7
-    passage = (0, 10) if mode == "modified" else SERVICE_BAY_PASSAGE
+    if mode == "modified":
+        passage = (6, 11)
+        if (x, y) == passage:
+            return (6, 10)
+        if y == 11:
+            if x < passage[0]:
+                return (x + 1, y)
+            if x > passage[0]:
+                return (x - 1, y)
+        return passage
+
+    bay_col = 7
+    passage = SERVICE_BAY_PASSAGE
 
     if x != bay_col:
         return passage
@@ -239,6 +250,16 @@ def make_service_bay_staff_edges(passage_y: int, bay_col: int, lab_col: int) -> 
 def service_bay_staff_edges() -> set[frozenset[tuple[int, int]]]:
     """Backup edge blocks that mirror the sketch — no west exit except at the passage row."""
     return make_service_bay_staff_edges(10, 7, 6)
+
+
+def rear_service_bay_staff_edges() -> set[frozenset[tuple[int, int]]]:
+    """Block the rear service band except at the center passage."""
+    edges: set[frozenset[tuple[int, int]]] = set()
+    for x in range(7):
+        if x == 6:
+            continue
+        edges.add(frozenset({(x, 10), (x, 11)}))
+    return edges
 
 
 def is_edge_blocked(
@@ -282,12 +303,13 @@ def neighbors(
     mode: str = "current",
 ) -> list[tuple[int, int]]:
     x, y = pos
-    workstation_cols = {1, 2, 3, 5, 6, 7} if mode == "modified" else {0, 1, 2, 4, 5, 6}
-    staff_col = 1 if mode == "modified" else 6
+    workstation_cols = {0, 1, 2, 3, 4, 5, 6, 7} if mode == "modified" else {0, 1, 2, 4, 5, 6}
+    vertical_lanes = {3, 4, 7} if mode == "modified" else set()
+    staff_col = 6 if mode == "modified" else 6
 
     if x in workstation_cols:
         candidates = [(x + 1, y), (x - 1, y)]
-        if is_service_bay_staff(agent_kind) and x == staff_col and y in {10, 11}:
+        if x in vertical_lanes or (is_service_bay_staff(agent_kind) and x == staff_col and y in {9, 10, 11}):
             candidates.extend([(x, y + 1), (x, y - 1)])
     else:
         candidates = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
@@ -349,23 +371,27 @@ class Simulation:
         
         # Configure layout properties dynamically based on mode
         if mode == "modified":
-            self.workstation_rows = (1, 2, 4, 5, 7, 8)
-            self.workstations = [(x, y) for y in self.workstation_rows for x in (1, 2, 3, 5, 6, 7)]
+            self.workstation_rows = (1, 2, 4, 5, 7)
+            self.workstations = [
+                (x, y)
+                for y in (1, 2, 4, 5)
+                for x in range(8)
+            ] + [(x, 7) for x in range(4, 8)]
             self.workstations_set = set(self.workstations)
-            self.data_racks = {(0, 6), (0, 7)}
-            self.student_assistant_desk = {(0, 8), (0, 9)}
+            self.data_racks = {(0, 11), (1, 11), (2, 11)}
+            self.student_assistant_desk = {(3, 11), (4, 11), (5, 11)}
             self.extra_pcs = set()
             self.storage = storage_for(mode)
             self.locker = self.storage
             self.shelves = {self.storage}
             self.instructor_desk = {(6, 0)}
             self.partition_wall = self.data_racks | self.student_assistant_desk
-            self.service_bay_passage = (0, 10)
+            self.service_bay_passage = (6, 11)
             self.service_bay_staff = self.data_racks | self.student_assistant_desk | {self.service_bay_passage}
             self.assistant_aid_posts = {"front": (4, 4), "back": (4, 8)}
             self.extinguisher_professor = (4, 0)
-            self.extinguisher_assistant = (1, 10)
-            self.extinguisher_shelves = (2, 11)
+            self.extinguisher_assistant = (6, 10)
+            self.extinguisher_shelves = (7, 10)
             self.fire_extinguishers = (self.extinguisher_professor, self.extinguisher_assistant, self.extinguisher_shelves)
             self.extinguisher_exit = self.extinguisher_professor
             self.extinguisher_entrance = None
@@ -413,10 +439,10 @@ class Simulation:
         self.events: list[tuple[int, str, str]] = []
         self.completed = False
         self.path_cache: dict[tuple[tuple[int, int], tuple[int, int], str | None], list[tuple[int, int]]] = {}
-        self.service_bay_staff_edges = make_service_bay_staff_edges(
-            self.service_bay_passage[1],
-            0 if self.mode == "modified" else 7,
-            1 if self.mode == "modified" else 6
+        self.service_bay_staff_edges = (
+            rear_service_bay_staff_edges()
+            if self.mode == "modified"
+            else make_service_bay_staff_edges(self.service_bay_passage[1], 7, 6)
         )
         self.agents = self.make_agents()
 
@@ -498,11 +524,14 @@ class Simulation:
             return None
         edges = set(self.service_bay_staff_edges)
         if bay_passage_cleared:
-            bay_col = 0 if self.mode == "modified" else 7
-            lab_col = 1 if self.mode == "modified" else 6
-            edges.add(frozenset({self.service_bay_passage, (lab_col, self.service_bay_passage[1])}))
-            edges.discard(frozenset({(bay_col, 0), (lab_col, 0)}))
-            edges.discard(frozenset({(bay_col, 11), (lab_col, 11)}))
+            if self.mode == "modified":
+                edges.add(frozenset({self.service_bay_passage, (6, 10)}))
+            else:
+                bay_col = 7
+                lab_col = 6
+                edges.add(frozenset({self.service_bay_passage, (lab_col, self.service_bay_passage[1])}))
+                edges.discard(frozenset({(bay_col, 0), (lab_col, 0)}))
+                edges.discard(frozenset({(bay_col, 11), (lab_col, 11)}))
         return edges
 
     def find_agent_path(
@@ -591,10 +620,10 @@ class Simulation:
             agents.extend(
                 [
                     Agent("I01", "instructor", "instructor", 6, 0, 101, wait_until=1, target=(6, 0), phase="waiting"),
-                    Agent("PA1", "assistant", "assistant", 0, 8, 102, wait_until=1, target=(0, 8), phase="waiting", assigned_exit="front"),
-                    Agent("PA2", "assistant", "assistant", 0, 9, 103, wait_until=1, target=(0, 9), phase="waiting", assigned_exit="back"),
-                    Agent("LC1", "custodian", "custodian", 0, 6, 104, wait_until=1, target=(0, 6), phase="waiting", assigned_exit="front"),
-                    Agent("LC2", "custodian", "custodian", 0, 7, 105, wait_until=1, target=(0, 7), phase="waiting", assigned_exit="back"),
+                    Agent("PA1", "assistant", "assistant", 3, 11, 102, wait_until=1, target=(3, 11), phase="waiting", assigned_exit="front"),
+                    Agent("PA2", "assistant", "assistant", 4, 11, 103, wait_until=1, target=(4, 11), phase="waiting", assigned_exit="back"),
+                    Agent("LC1", "custodian", "custodian", 0, 11, 104, wait_until=1, target=(0, 11), phase="waiting", assigned_exit="front"),
+                    Agent("LC2", "custodian", "custodian", 2, 11, 105, wait_until=1, target=(2, 11), phase="waiting", assigned_exit="back"),
                 ]
             )
         else:
@@ -632,6 +661,9 @@ class Simulation:
         )
 
     def choose_exit(self, agent: Agent, density: dict[tuple[int, int], int]) -> tuple[int, int]:
+        if self.mode == "modified" and self.fire_origin_name == "assistant":
+            return FRONT_EXIT
+
         if agent.behavior == "locker" and agent.visited_locker:
             preferred = FRONT_EXIT if self.mode == "modified" else BACK_EXIT
             if self.find_agent_path((agent.x, agent.y), preferred, agent.kind, agent):
@@ -691,6 +723,7 @@ class Simulation:
                     self.distance_to_fire(locker_cell) > 2
                     and len(self.active_fire_cells) < 8
                     and self.fire_damage < 900
+                    and not (self.mode == "modified" and self.fire_origin_name == "assistant")
                 )
                 if locker_safe and self.find_agent_path((agent.x, agent.y), locker_cell, agent.kind, agent):
                     target_cell = locker_cell
@@ -748,21 +781,30 @@ class Simulation:
 
         if should_route_via_center_aisle(agent, target_cell, self.mode):
             aisle_col = 4 if self.mode == "modified" else 3
+            rear_waypoint_row = 9 if self.mode == "modified" else 10
+            if target_cell[1] == 0 and agent.y == 0:
+                return target_cell
+            if target_cell[1] == 11 and agent.y >= rear_waypoint_row:
+                return target_cell
             if agent.x != aisle_col:
-                target_row = 10 if agent.y == 11 else agent.y
+                target_row = rear_waypoint_row if agent.y >= rear_waypoint_row else agent.y
                 waypoint = (aisle_col, target_row)
                 if self.distance_to_fire(waypoint) <= 1:
-                    return (aisle_col, 0 if target_row >= 10 else 10)
+                    return (aisle_col, 0 if target_row >= rear_waypoint_row else rear_waypoint_row)
                 return waypoint
             else:
                 if target_cell[1] == 0:
+                    if agent.y == 0:
+                        return target_cell
                     if self.distance_to_fire((aisle_col, 0)) <= 1:
-                        return BACK_EXIT if self.find_agent_path((agent.x, agent.y), BACK_EXIT, agent.kind, agent) else (aisle_col, 10)
+                        return BACK_EXIT if self.find_agent_path((agent.x, agent.y), BACK_EXIT, agent.kind, agent) else (aisle_col, rear_waypoint_row)
                     return (aisle_col, 0)
                 else:
-                    if self.distance_to_fire((aisle_col, 10)) <= 1:
+                    if agent.y >= rear_waypoint_row:
+                        return target_cell
+                    if self.distance_to_fire((aisle_col, rear_waypoint_row)) <= 1:
                         return FRONT_EXIT if self.find_agent_path((agent.x, agent.y), FRONT_EXIT, agent.kind, agent) else (aisle_col, 0)
-                    return (aisle_col, 10)
+                    return (aisle_col, rear_waypoint_row)
         return target_cell
 
     def speed_for(self, agent: Agent, density: dict[tuple[int, int], int]) -> float:
@@ -771,7 +813,7 @@ class Simulation:
         crowded = density.get((agent.x, agent.y), 1)
 
         aisle_col = 4 if self.mode == "modified" else 3
-        non_squeeze_cols = {4} if self.mode == "modified" else {3, 7}
+        non_squeeze_cols = {3, 4, 7} if self.mode == "modified" else {3, 7}
 
         # Row-workstation squeeze: narrow gap between rows slows movement
         if is_lab_cell((agent.x, agent.y)) and agent.x not in non_squeeze_cols:
@@ -805,7 +847,7 @@ class Simulation:
 
         # Modified layout has clearer pathways and better signage
         if self.mode == "modified":
-            speed *= 1.80
+            speed *= 1.88
 
         if agent.kind == "student":
             speed *= agent.mobility_factor
@@ -1051,7 +1093,7 @@ class Simulation:
                 continue
 
             agent.x, agent.y = next_cell
-            bay_passage_exit_cell = (1 if self.mode == "modified" else 6, self.service_bay_passage[1])
+            bay_passage_exit_cell = (6, 10) if self.mode == "modified" else (6, self.service_bay_passage[1])
             if (
                 agent.kind in {"custodian", "assistant"}
                 and current == self.service_bay_passage
