@@ -52,7 +52,7 @@ Deploy from the repository root. No build command or output directory is require
 | Press **Step** | Advances one simulation second for close inspection. |
 | Switch **Mode** | Compares current locker placement with the modified layout. |
 | Toggle **Panic** | Changes collision, trip, and crowd behavior. |
-| Change **Fire** | Moves the incident origin between the data rack and instructor desk. |
+| Change **Fire** | Moves the incident origin between the data rack, instructor desk, student workstation, television, and assistant bay. |
 | Toggle **Heatmap** | Shows accumulated congestion intensity. |
 | Click **Run Comparison** | Runs current and modified layouts side by side. |
 
@@ -149,23 +149,35 @@ Recent smoke benchmark on this workspace:
 
 | Metric | Result |
 | --- | ---: |
-| Scenarios | 8 |
-| Total runtime | 6.401790 s |
-| Scenarios/sec | 1.25 |
-| Simulation steps/sec | 235.40 |
+| Scenarios | 20 |
+| Total runtime | 28.760789 s |
+| Scenarios/sec | 0.70 |
+| Simulation steps/sec | 106.22 |
 
 Validated scenario results:
 
 | Layout | Panic | Fire origin | Time | Evacuated | Avg wait | Avg queue | Throughput | Exit util | Trips | Door hits | Max heat |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Current | Yes | Data rack | 312s | 41 / 41 | 131.49s | 14.12 | 7.88/min | 6.57% | 38 | 16 | 1143 |
-| Current | Yes | Instructor desk | 276s | 41 / 41 | 144.54s | 17.44 | 8.91/min | 7.43% | 24 | 8 | 1109 |
-| Current | No | Data rack | 216s | 41 / 41 | 83.93s | 13.66 | 11.39/min | 9.49% | 12 | 10 | 780 |
-| Current | No | Instructor desk | 233s | 41 / 41 | 95.17s | 13.74 | 10.56/min | 8.80% | 12 | 7 | 670 |
-| Modified | Yes | Data rack | 100s | 41 / 41 | 32.95s | 12.07 | 24.60/min | 20.50% | 6 | 13 | 185 |
-| Modified | Yes | Instructor desk | 132s | 41 / 41 | 52.29s | 14.55 | 18.64/min | 15.53% | 5 | 12 | 476 |
-| Modified | No | Data rack | 124s | 41 / 41 | 40.54s | 11.63 | 19.84/min | 16.53% | 5 | 5 | 269 |
-| Modified | No | Instructor desk | 114s | 41 / 41 | 47.44s | 15.90 | 21.58/min | 17.98% | 5 | 5 | 347 |
+| Current | Yes | Data rack | 180s | 41 / 41 | 92.59s | 14.43 | 13.67/min | 11.39% | 29 | 1 | 778 |
+| Current | Yes | Instructor desk | 225s | 41 / 41 | 128.85s | 17.95 | 10.93/min | 9.11% | 29 | 1 | 918 |
+| Current | Yes | Student workstation | 238s | 41 / 41 | 123.22s | 16.42 | 10.34/min | 8.61% | 28 | 1 | 1151 |
+| Current | Yes | Television | 234s | 41 / 41 | 122.00s | 17.08 | 10.51/min | 8.76% | 22 | 3 | 762 |
+| Current | Yes | Assistant bay | 210s | 41 / 41 | 113.12s | 14.71 | 11.71/min | 9.76% | 20 | 1 | 593 |
+| Current | No | Data rack | 121s | 41 / 41 | 60.61s | 15.20 | 20.33/min | 16.94% | 13 | 1 | 356 |
+| Current | No | Instructor desk | 206s | 41 / 41 | 105.54s | 18.70 | 11.94/min | 9.95% | 13 | 1 | 667 |
+| Current | No | Student workstation | 191s | 41 / 41 | 81.29s | 13.61 | 12.88/min | 10.73% | 9 | 1 | 484 |
+| Current | No | Television | 157s | 41 / 41 | 92.90s | 19.21 | 15.67/min | 13.06% | 12 | 2 | 512 |
+| Current | No | Assistant bay | 163s | 41 / 41 | 71.24s | 11.86 | 15.09/min | 12.58% | 17 | 1 | 390 |
+| Modified | Yes | Data rack | 71s | 41 / 41 | 35.59s | 18.55 | 34.65/min | 28.87% | 7 | 2 | 305 |
+| Modified | Yes | Instructor desk | 86s | 41 / 41 | 35.05s | 15.03 | 28.60/min | 23.84% | 3 | 0 | 404 |
+| Modified | Yes | Student workstation | 112s | 41 / 41 | 48.32s | 16.15 | 21.96/min | 18.30% | 3 | 2 | 466 |
+| Modified | Yes | Television | 195s | 41 / 41 | 108.22s | 21.41 | 12.62/min | 10.51% | 5 | 0 | 1448 |
+| Modified | Yes | Assistant bay | 124s | 41 / 41 | 58.88s | 18.28 | 19.84/min | 16.53% | 5 | 3 | 576 |
+| Modified | No | Data rack | 56s | 41 / 41 | 24.05s | 16.18 | 43.93/min | 36.61% | 2 | 2 | 192 |
+| Modified | No | Instructor desk | 92s | 41 / 41 | 36.46s | 15.98 | 26.74/min | 22.28% | 5 | 0 | 242 |
+| Modified | No | Student workstation | 58s | 41 / 41 | 26.56s | 17.90 | 42.41/min | 35.34% | 0 | 2 | 363 |
+| Modified | No | Television | 262s | 41 / 41 | 144.32s | 20.35 | 9.39/min | 7.82% | 5 | 0 | 2112 |
+| Modified | No | Assistant bay | 74s | 41 / 41 | 36.85s | 16.99 | 33.24/min | 27.70% | 3 | 2 | 270 |
 
 <details>
 <summary><strong>Project Map</strong></summary>

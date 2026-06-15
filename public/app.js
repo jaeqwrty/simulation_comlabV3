@@ -102,8 +102,8 @@ function layoutFor(mode = "current", fireOrigin = "data") {
 
   const storage = modified ? [7, 11] : [7, 11];
   const fireOrigins = modified
-    ? { data: [1, 11], desk: [6, 0], workstation: [2, 5], locker: storage, shelves: storage, assistant: [4, 11] }
-    : { data: [7, 4], desk: [6, 0], workstation: [2, 5], locker: storage, shelves: storage, assistant: [7, 8] };
+    ? { data: [1, 11], desk: [6, 0], workstation: [2, 5], tv: [5, 0], locker: [5, 0], shelves: [5, 0], assistant: [4, 11] }
+    : { data: [7, 4], desk: [6, 0], workstation: [2, 5], tv: [4, 0], locker: [4, 0], shelves: [4, 0], assistant: [7, 8] };
 
   return {
     rows: 12,
@@ -129,7 +129,9 @@ function layoutFor(mode = "current", fireOrigin = "data") {
       data: "Data / communication rack",
       desk: "Instructor desk",
       workstation: "Student workstation row",
-      locker: "Locker / bag shelves",
+      tv: "Television",
+      locker: "Television",
+      shelves: "Television",
       assistant: "Student assistant bay"
     },
     cell: CELL,
@@ -415,7 +417,7 @@ function syncFromState() {
   els.statusDot.classList.toggle("running", running);
   els.statusText.textContent = running ? "Running" : state.completed ? "Complete" : "Ready";
   els.mode.value = state.mode;
-  els.fire.value = state.fireOrigin === "shelves" ? "locker" : state.fireOrigin;
+  els.fire.value = ["locker", "shelves"].includes(state.fireOrigin) ? "tv" : state.fireOrigin;
   els.speed.value = state.speed;
   els.speedText.textContent = `${Number(state.speed).toFixed(1)}x`;
   panic = state.panic;
@@ -545,6 +547,22 @@ function drawRearFacingMonitorTile(ctx, cx, cy) {
 }
 
 function drawBlueprintTag(ctx, label, x, y, options = {}) {
+  const hiddenFurnitureLabels = new Set([
+    "EXTRA PCS",
+    "WHITE BOARD",
+    "BAGS\nSHELVES",
+    "PASSAGE",
+    "STUDENT WORKSTATIONS",
+    "STUDENT WORKSTATIONS\n36 PCS",
+    "PROFESSOR",
+    "CUSTODIAN\nDATA RACK",
+    "STUDENT\nASSISTANT",
+    "DATA\nRACK",
+    "CUSTODIAN\nTABLE",
+    "HALLWAY"
+  ]);
+  if (hiddenFurnitureLabels.has(String(label).toUpperCase())) return;
+
   const {
     tone = "blue",
     align = "center",
@@ -783,44 +801,47 @@ function drawUnifiedStorageBlueprint(ctx, layout) {
   if (!storage) return;
 
   const isMod = state && state.mode === "modified";
-  const label = "BAGS & SHELVES";
+  const currentCenter = visualCenter(storage[0], storage[1]);
+  const w = isMod ? 16 : 58;
+  const h = isMod ? 58 : 16;
+  const x = isMod ? LAB_RIGHT - w : currentCenter.x - w / 2;
+  const y = isMod ? MAP_H - h - 56 : MAP_H - h - 5;
 
+  ctx.save();
+  ctx.fillStyle = "rgba(245, 158, 11, 0.07)";
+  ctx.strokeStyle = "rgba(251, 191, 36, 0.58)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 3);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(203, 213, 225, 0.32)";
   if (isMod) {
-    const w = 16;
-    const h = 58;
-    const x = LAB_RIGHT - w - 16;
-    const y = MAP_H - h - 56;
-
-    ctx.save();
-    ctx.fillStyle = "rgba(245, 158, 11, 0.07)";
-    ctx.strokeStyle = "rgba(251, 191, 36, 0.58)";
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 3);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.strokeStyle = "rgba(203, 213, 225, 0.32)";
     for (let offset = 9; offset <= h - 8; offset += 8) {
       ctx.beginPath();
       ctx.moveTo(x + 3, y + offset);
       ctx.lineTo(x + w - 3, y + offset);
       ctx.stroke();
     }
-
-    drawBlueprintTag(ctx, "Bags\nShelves", x - 6, y + h / 2, {
-      tone: "amber",
-      size: 5.5,
-      paddingX: 3,
-      paddingY: 2,
-      lineHeight: 6,
-      align: "right"
-    });
-    ctx.restore();
-    return;
+  } else {
+    for (let offset = 10; offset <= w - 8; offset += 9) {
+      ctx.beginPath();
+      ctx.moveTo(x + offset, y + 3);
+      ctx.lineTo(x + offset, y + h - 3);
+      ctx.stroke();
+    }
   }
 
-  drawStorageBlueprint(ctx, storage, label, "combined");
+  drawBlueprintTag(ctx, "Bags\nShelves", isMod ? x - 6 : x + w / 2, isMod ? y + h / 2 : y - 2, {
+    tone: "amber",
+    size: 5.5,
+    paddingX: 3,
+    paddingY: 2,
+    lineHeight: 6,
+    align: isMod ? "right" : "center"
+  });
+  ctx.restore();
 }
 
 function drawStorageBlueprint(ctx, pos, label, tone = "amber") {
@@ -2099,21 +2120,32 @@ els.heat.onclick = () => {
   triggerDraw();
 };
 els.compare.onclick = async () => {
-  const res = await fetch("/api/compare", { method: "POST" });
-  const data = await res.json();
-  els.comparison.innerHTML = `<table>
-    <thead><tr><th>Metric</th><th>Current</th><th>Modified</th><th>Improvement</th></tr></thead>
-    <tbody>
-      ${comparisonRow("Total processing time", data.current.processing_time, data.modified.processing_time, { suffix: "s" })}
-      ${comparisonRow("Average waiting time", data.current.average_wait_time, data.modified.average_wait_time, { suffix: "s", precision: 1 })}
-      ${comparisonRow("Average queue length", data.current.average_queue_length, data.modified.average_queue_length, { precision: 1 })}
-      ${comparisonRow("Throughput", data.current.throughput_per_minute, data.modified.throughput_per_minute, { suffix: "/min", precision: 1, higherIsBetter: true })}
-      ${comparisonRow("Exit resource utilization", data.current.exit_utilization_percent, data.modified.exit_utilization_percent, { suffix: "%", precision: 1, higherIsBetter: true })}
-      ${comparisonRow("Trips", data.current.trips, data.modified.trips)}
-      ${comparisonRow("Door collisions", data.current.door_collisions, data.modified.door_collisions)}
-      ${comparisonRow("Max heat", data.current.max_heat, data.modified.max_heat)}
-    </tbody>
-  </table>${comparisonAnalysis(data)}`;
+  const originalHtml = els.compare.innerHTML;
+  els.compare.disabled = true;
+  els.compare.innerHTML = `<span>Comparing...</span>`;
+  try {
+    const res = await fetch("/api/compare", { method: "POST" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    els.comparison.innerHTML = `<table>
+      <thead><tr><th>Metric</th><th>Current</th><th>Modified</th><th>Improvement</th></tr></thead>
+      <tbody>
+        ${comparisonRow("Total processing time", data.current.processing_time, data.modified.processing_time, { suffix: "s" })}
+        ${comparisonRow("Average waiting time", data.current.average_wait_time, data.modified.average_wait_time, { suffix: "s", precision: 1 })}
+        ${comparisonRow("Average queue length", data.current.average_queue_length, data.modified.average_queue_length, { precision: 1 })}
+        ${comparisonRow("Throughput", data.current.throughput_per_minute, data.modified.throughput_per_minute, { suffix: "/min", precision: 1, higherIsBetter: true })}
+        ${comparisonRow("Exit resource utilization", data.current.exit_utilization_percent, data.modified.exit_utilization_percent, { suffix: "%", precision: 1, higherIsBetter: true })}
+        ${comparisonRow("Trips", data.current.trips, data.modified.trips)}
+        ${comparisonRow("Door collisions", data.current.door_collisions, data.modified.door_collisions)}
+        ${comparisonRow("Max heat", data.current.max_heat, data.modified.max_heat)}
+      </tbody>
+    </table>${comparisonAnalysis(data)}`;
+  } catch (err) {
+    els.comparison.innerHTML = `<div class="analysis-note">Comparison could not be completed. Reset the scenario and try again.</div>`;
+  } finally {
+    els.compare.disabled = false;
+    els.compare.innerHTML = originalHtml;
+  }
 };
 
 applyUrlConfig();

@@ -28,6 +28,8 @@ STUDENT_ASSISTANT_DESK = {(7, y) for y in range(7, 10)}
 EXTRA_PCS = {(x, 11) for x in range(4)}
 SHELVES = {(7, 11)}
 INSTRUCTOR_DESK = {(6, 0)}
+TELEVISION = (4, 0)
+MODIFIED_TELEVISION = (5, 0)
 WORKSTATION_ROWS = (1, 2, 4, 5, 7, 8)
 WORKSTATIONS = [(x, y) for y in WORKSTATION_ROWS for x in (0, 1, 2, 4, 5, 6)]
 WORKSTATIONS_SET = set(WORKSTATIONS)
@@ -55,8 +57,9 @@ FIRE_LOCATION_LABELS = {
     "data": "Data / communication rack",
     "desk": "Instructor desk",
     "workstation": "Student workstation row",
-    "locker": "Locker / bag shelves",
-    "shelves": "Locker / bag shelves",
+    "tv": "Television",
+    "locker": "Television",
+    "shelves": "Television",
     "assistant": "Student assistant bay",
 }
 
@@ -132,8 +135,8 @@ def fire_origin_for(origin: str, mode: str = "current") -> tuple[int, int]:
             return (6, 0)
         elif origin == "workstation":
             return (2, 5)
-        elif origin in {"locker", "shelves"}:
-            return storage_for(mode)
+        elif origin in {"tv", "locker", "shelves"}:
+            return MODIFIED_TELEVISION
         elif origin == "assistant":
             return (4, 11)
         else:  # "data"
@@ -143,8 +146,8 @@ def fire_origin_for(origin: str, mode: str = "current") -> tuple[int, int]:
             return (6, 0)
         elif origin == "workstation":
             return (2, 5)
-        elif origin in {"locker", "shelves"}:
-            return storage_for(mode)
+        elif origin in {"tv", "locker", "shelves"}:
+            return TELEVISION
         elif origin == "assistant":
             return (7, 8)
         else:  # "data"
@@ -691,6 +694,18 @@ class Simulation:
         )
 
     def choose_exit(self, agent: Agent, density: dict[tuple[int, int], int]) -> tuple[int, int]:
+        if (
+            self.mode == "modified"
+            and agent.kind == "student"
+            and agent.behavior == "locker"
+            and agent.visited_locker
+            and agent.assigned_exit == "back"
+        ):
+            current = (agent.x, agent.y)
+            if current == BACK_EXIT or self.find_agent_path(current, BACK_EXIT, agent.kind, agent):
+                return BACK_EXIT
+            return FRONT_EXIT
+
         if self.mode == "modified" and agent.kind == "student":
             current = (agent.x, agent.y)
             front_path = self.find_agent_path(current, FRONT_EXIT, agent.kind, agent)
@@ -1168,10 +1183,14 @@ class Simulation:
         if agent.behavior == "locker" and not agent.visited_locker and pos == locker_for(self.mode):
             if self.time > 180 or len(self.active_fire_cells) >= 8 or self.fire_damage >= 900:
                 agent.visited_locker = True
+                if self.mode == "modified":
+                    agent.assigned_exit = "back"
                 agent.phase = "evacuating"
                 self.add_event("locker", f"{agent.agent_id} skipped locker retrieval as fire conditions escalated")
                 return
             agent.visited_locker = True
+            if self.mode == "modified":
+                agent.assigned_exit = "back"
             # Locker retrieval: rummaging through a bag/locker takes significant time
             locker_delay = 3 if self.mode == "modified" else 10 + int(seeded_random(agent.seed + 77) * 6)  # 10-15 steps
             agent.wait_until = self.time + locker_delay

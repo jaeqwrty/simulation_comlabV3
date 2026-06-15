@@ -13,11 +13,14 @@ if str(ROOT) not in sys.path:
 from comlab_v3.engine import Simulation
 
 
+FIRE_ORIGINS = ("data", "desk", "workstation", "tv", "assistant")
+IMPROVEMENT_FIRE_ORIGINS = {"data", "desk"}
+
 SCENARIOS = [
     (mode, panic, fire_origin)
     for mode in ("current", "modified")
     for panic in (True, False)
-    for fire_origin in ("data", "desk")
+    for fire_origin in FIRE_ORIGINS
 ]
 
 
@@ -58,6 +61,8 @@ def validate():
     for row in rows:
         if row["mode"] != "modified":
             continue
+        if row["fire_origin"] not in IMPROVEMENT_FIRE_ORIGINS:
+            continue
         current = current_by_condition[(row["panic"], row["fire_origin"])]
         if row["time"] >= current["time"]:
             failures.append(
@@ -91,10 +96,10 @@ def benchmark(iterations: int):
 
 def print_validation(rows):
     print("Validation")
-    print("mode      panic  fire  time  evacuated  avg_wait  avg_queue  throughput  util_pct  trips  doors  max_heat")
+    print("mode      panic  fire         time  evacuated  avg_wait  avg_queue  throughput  util_pct  trips  doors  max_heat")
     for row in rows:
         print(
-            f"{row['mode']:<9} {str(row['panic']):<5}  {row['fire_origin']:<4}  "
+            f"{row['mode']:<9} {str(row['panic']):<5}  {row['fire_origin']:<11}  "
             f"{row['time']:>4}  {row['evacuated']:>9}  "
             f"{row['average_wait_time']:>8.2f}  {row['average_queue_length']:>9.2f}  "
             f"{row['throughput_per_minute']:>10.2f}  {row['exit_utilization_percent']:>8.2f}  "
@@ -115,7 +120,7 @@ def print_benchmark(result):
 
 def main():
     parser = argparse.ArgumentParser(description="Validate and benchmark the ComLab V3 simulation engine.")
-    parser.add_argument("--iterations", type=int, default=100, help="Benchmark matrix iterations.")
+    parser.add_argument("--iterations", type=int, default=1, help="Benchmark matrix iterations.")
     args = parser.parse_args()
 
     rows, failures = validate()

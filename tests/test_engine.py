@@ -11,11 +11,13 @@ from comlab_v3.engine import (
     FIRE_EXTINGUISHERS,
     FRONT_EXIT,
     INSTRUCTOR_DESK,
+    MODIFIED_TELEVISION,
     MODIFIED_LOCKER,
     SERVICE_BAY_PASSAGE,
     SHELVES,
     Simulation,
     STUDENT_ASSISTANT_DESK,
+    TELEVISION,
     WORKSTATION_ROWS,
     WORKSTATIONS,
     fire_origin_for,
@@ -29,7 +31,7 @@ SCENARIOS = [
     (mode, panic, fire_origin)
     for mode in ("current", "modified")
     for panic in (True, False)
-    for fire_origin in ("data", "desk", "workstation", "locker", "shelves", "assistant")
+    for fire_origin in ("data", "desk", "workstation", "tv", "assistant")
 ]
 
 
@@ -94,15 +96,19 @@ class SimulationValidationTests(unittest.TestCase):
         self.assertEqual(STUDENT_ASSISTANT_DESK, {(7, y) for y in range(7, 10)})
         self.assertEqual(EXTRA_PCS, {(x, 11) for x in range(4)})
         self.assertEqual(SHELVES, {(7, 11)})
+        self.assertEqual(TELEVISION, (4, 0))
+        self.assertEqual(MODIFIED_TELEVISION, (5, 0))
         self.assertEqual(fire_origin_for("desk"), (6, 0))
         self.assertEqual(fire_origin_for("data"), (7, 4))
         self.assertEqual(fire_origin_for("workstation"), (2, 5))
-        self.assertEqual(fire_origin_for("locker"), (7, 11))
-        self.assertEqual(fire_origin_for("shelves"), (7, 11))
+        self.assertEqual(fire_origin_for("tv"), TELEVISION)
+        self.assertEqual(fire_origin_for("locker"), TELEVISION)
+        self.assertEqual(fire_origin_for("shelves"), TELEVISION)
         self.assertEqual(fire_origin_for("assistant"), (7, 8))
         self.assertEqual(fire_origin_for("data", "modified"), (1, 11))
-        self.assertEqual(fire_origin_for("locker", "modified"), MODIFIED_LOCKER)
-        self.assertEqual(fire_origin_for("shelves", "modified"), MODIFIED_LOCKER)
+        self.assertEqual(fire_origin_for("tv", "modified"), MODIFIED_TELEVISION)
+        self.assertEqual(fire_origin_for("locker", "modified"), MODIFIED_TELEVISION)
+        self.assertEqual(fire_origin_for("shelves", "modified"), MODIFIED_TELEVISION)
         self.assertEqual(fire_origin_for("assistant", "modified"), (4, 11))
 
     def test_professor_starts_at_instructor_desk_before_simulation_runs(self):
@@ -284,7 +290,7 @@ class SimulationValidationTests(unittest.TestCase):
                     msg=f"{seat} route crosses unrelated workstation/computer cells: {path}",
                 )
 
-    def test_modified_students_prefer_exit_door_over_entrance_door_when_safe(self):
+    def test_modified_shelf_bound_students_exit_through_entrance_door(self):
         sim = Simulation("modified", panic=False, fire_origin="data")
         for agent in sim.agents:
             if agent.kind == "student":
@@ -295,9 +301,11 @@ class SimulationValidationTests(unittest.TestCase):
 
         students = [agent for agent in sim.agents if agent.kind == "student"]
         self.assertTrue(all(agent.exited for agent in students))
-        self.assertFalse(
-            any((agent.x, agent.y) == BACK_EXIT for agent in students),
-            "Modified-layout students should not use the entrance door when the EXIT door is safe",
+        shelf_bound = [agent for agent in students if agent.behavior == "locker"]
+        self.assertTrue(shelf_bound)
+        self.assertTrue(
+            all((agent.x, agent.y) == BACK_EXIT for agent in shelf_bound),
+            "Modified-layout shelf-bound students should leave through the entrance door after retrieval",
         )
 
     def test_modified_extinguishers_are_reachable_from_staff_passage(self):

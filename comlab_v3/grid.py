@@ -22,7 +22,7 @@ EMERGENCY_STAIRS = (12, 11)
 
 CURRENT_LOCKER = (7, 11)
 
-MODIFIED_LOCKER = (7, 10)
+MODIFIED_LOCKER = (7, 11)
 
 DATA_RACKS = {(7, y) for y in range(2, 7)}
 
@@ -33,6 +33,8 @@ EXTRA_PCS = {(x, 11) for x in range(4)}
 SHELVES = {(7, 11)}
 
 INSTRUCTOR_DESK = {(6, 0)}
+TELEVISION = (4, 0)
+MODIFIED_TELEVISION = (5, 0)
 
 WORKSTATION_ROWS = (1, 2, 4, 5, 7, 8)
 
@@ -91,6 +93,8 @@ def fire_origin_for(origin: str, mode: str = "current") -> tuple[int, int]:
             return (6, 0)
         elif origin == "workstation":
             return (3, 5)
+        elif origin in {"tv", "locker", "shelves"}:
+            return MODIFIED_TELEVISION
         else:  # "data"
             return (0, 4)
     else:
@@ -98,6 +102,8 @@ def fire_origin_for(origin: str, mode: str = "current") -> tuple[int, int]:
             return (6, 0)
         elif origin == "workstation":
             return (2, 5)
+        elif origin in {"tv", "locker", "shelves"}:
+            return TELEVISION
         else:  # "data"
             return (7, 4)
 

@@ -20,9 +20,9 @@ class Simulation:
             self.data_racks = {(0, y) for y in range(2, 7)}
             self.student_assistant_desk = {(0, y) for y in range(7, 10)}
             self.extra_pcs = {(2, 11), (3, 11), (5, 11)}
-            self.shelves = {(7, 10)}
+            self.shelves = {MODIFIED_LOCKER}
             self.instructor_desk = {(6, 0)}
-            self.locker = (7, 10)
+            self.locker = MODIFIED_LOCKER
             self.partition_wall = self.data_racks | self.student_assistant_desk
             self.service_bay_passage = (0, 10)
             self.service_bay_staff = self.data_racks | self.student_assistant_desk | {self.service_bay_passage}
