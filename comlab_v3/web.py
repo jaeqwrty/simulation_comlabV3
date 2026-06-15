@@ -1,52 +1,76 @@
-"""Python HTTP server for the ComLab V3 simulation UI."""
+"""FastAPI server for the ComLab V3 simulation UI."""
 
 from __future__ import annotations
 
-import argparse
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import json
-from pathlib import Path
 import threading
 import time
-import webbrowser
+from pathlib import Path
+from typing import Any
 
-from .engine import (
-    BACK_EXIT,
-    CELL,
-    COLS,
-    CURRENT_LOCKER,
-    DATA_RACKS,
-    EMERGENCY_STAIRS,
-    EXTINGUISHER_ASSISTANT,
-    EXTINGUISHER_ENTRANCE,
-    EXTINGUISHER_EXIT,
-    EXTINGUISHER_PROFESSOR,
-    EXTINGUISHER_SHELVES,
-    FIRE_EXTINGUISHERS,
-    EXTRA_PCS,
-    FRONT_EXIT,
-    FRONT_STAIRS,
-    HALL_COLS,
-    HALLWAY_WALL,
-    INSTRUCTOR_DESK,
-    LAB_COLS,
-    MODIFIED_LOCKER,
-    PARTITION_WALL,
-    ROWS,
-    SERVICE_BAY_PASSAGE,
-    SHELVES,
-    STUDENT_ASSISTANT_DESK,
-    WORKSTATION_ROWS,
-    WORKSTATIONS,
-    Simulation,
-    fire_origin_for,
-    locker_for,
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+from .engine import Simulation
+from .grid import (
+    BACK_EXIT, CELL, COLS, CURRENT_LOCKER, DATA_RACKS, EMERGENCY_STAIRS,
+    EXTINGUISHER_ASSISTANT, EXTINGUISHER_ENTRANCE, EXTINGUISHER_EXIT,
+    EXTINGUISHER_PROFESSOR, EXTINGUISHER_SHELVES, FIRE_EXTINGUISHERS,
+    EXTRA_PCS, FRONT_EXIT, FRONT_STAIRS, HALL_COLS, HALLWAY_WALL,
+    INSTRUCTOR_DESK, LAB_COLS, MODIFIED_LOCKER, ROWS,
+    SERVICE_BAY_PASSAGE, SHELVES, STUDENT_ASSISTANT_DESK,
 )
+from .models import ControlAction, ResetRequest
 
 
-HOST = "127.0.0.1"
-PORT = 8000
-STATIC_DIR = Path(__file__).with_name("static")
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+def role_for_agent(agent) -> str:
+    roles = {
+        "I01": "Professor / extinguisher lead",
+        "PA1": "Front aisle student aide",
+        "PA2": "Back aisle student aide",
+        "LC1": "Front exit door holder",
+        "LC2": "Back exit door holder",
+    }
+    return roles.get(agent.agent_id, agent.behavior)
+
+
+def layout_payload(mode: str, fire_origin: str) -> dict[str, Any]:
+    sim = Simulation(mode, fire_origin=fire_origin)
+    return {
+        "rows": ROWS,
+        "cols": COLS,
+        "labCols": LAB_COLS,
+        "hallCols": HALL_COLS,
+        "workstations": sim.workstations,
+        "workstationRows": sim.workstation_rows,
+        "instructorDesk": sorted(sim.instructor_desk),
+        "dataRacks": sorted(sim.data_racks),
+        "studentAssistantDesk": sorted(sim.student_assistant_desk),
+        "extraPcs": sorted(sim.extra_pcs),
+        "shelves": sorted(sim.shelves),
+        "frontExit": FRONT_EXIT,
+        "backExit": BACK_EXIT,
+        "frontStairs": FRONT_STAIRS,
+        "emergencyStairs": EMERGENCY_STAIRS,
+        "currentLocker": CURRENT_LOCKER,
+        "modifiedLocker": MODIFIED_LOCKER,
+        "locker": sim.locker,
+        "fireOrigin": sim.fire_origin,
+        "cell": CELL,
+        "hallwayWall": sorted(HALLWAY_WALL),
+        "partitionWall": sorted(sim.partition_wall),
+        "serviceBayPassage": sim.service_bay_passage,
+        "extinguisherExit": sim.extinguisher_exit,
+        "extinguisherEntrance": sim.extinguisher_entrance,
+        "extinguisherProfessor": sim.extinguisher_professor,
+        "extinguisherAssistant": sim.extinguisher_assistant,
+        "extinguisherShelves": sim.extinguisher_shelves,
+        "fireExtinguishers": list(sim.fire_extinguishers),
+    }
 
 
 class SimulationService:
@@ -75,25 +99,25 @@ class SimulationService:
             else:
                 time.sleep(0.08)
 
-    def apply_config(self, config: dict | None):
+    def apply_config(self, config):
         if not config:
             return
-        self.mode = config.get("mode", self.mode)
-        self.panic = bool(config.get("panic", self.panic))
-        self.fire_origin = config.get("fireOrigin", self.fire_origin)
-        self.speed = float(config.get("speed", self.speed))
+        self.mode = config.mode if config.mode is not None else self.mode
+        self.panic = config.panic if config.panic is not None else self.panic
+        self.fire_origin = config.fireOrigin if config.fireOrigin is not None else self.fire_origin
+        self.speed = config.speed if config.speed is not None else self.speed
         
         if hasattr(self, "sim") and self.sim:
             self.sim.panic = self.panic
 
-    def reset(self, config: dict | None = None):
+    def reset(self, config=None):
         with self.lock:
             self.apply_config(config)
             self.running = False
             self.sim = Simulation(self.mode, self.panic, self.fire_origin)
             return self.state()
 
-    def control(self, action: str, config: dict | None = None):
+    def control(self, action: str, config=None):
         with self.lock:
             self.apply_config(config)
             if action == "start":
@@ -160,125 +184,45 @@ class SimulationService:
         }
 
 
-def layout_payload(mode: str, fire_origin: str):
-    sim = Simulation(mode, fire_origin=fire_origin)
-    return {
-        "rows": ROWS,
-        "cols": COLS,
-        "labCols": LAB_COLS,
-        "hallCols": HALL_COLS,
-        "workstations": sim.workstations,
-        "workstationRows": sim.workstation_rows,
-        "instructorDesk": sorted(sim.instructor_desk),
-        "dataRacks": sorted(sim.data_racks),
-        "studentAssistantDesk": sorted(sim.student_assistant_desk),
-        "extraPcs": sorted(sim.extra_pcs),
-        "shelves": sorted(sim.shelves),
-        "frontExit": FRONT_EXIT,
-        "backExit": BACK_EXIT,
-        "frontStairs": FRONT_STAIRS,
-        "emergencyStairs": EMERGENCY_STAIRS,
-        "currentLocker": CURRENT_LOCKER,
-        "modifiedLocker": MODIFIED_LOCKER,
-        "locker": sim.locker,
-        "fireOrigin": sim.fire_origin,
-        "cell": CELL,
-        "hallwayWall": sorted(HALLWAY_WALL),
-        "partitionWall": sorted(sim.partition_wall),
-        "serviceBayPassage": sim.service_bay_passage,
-        "extinguisherExit": sim.extinguisher_exit,
-        "extinguisherEntrance": sim.extinguisher_entrance,
-        "extinguisherProfessor": sim.extinguisher_professor,
-        "extinguisherAssistant": sim.extinguisher_assistant,
-        "extinguisherShelves": sim.extinguisher_shelves,
-        "fireExtinguishers": list(sim.fire_extinguishers),
-    }
-
-
 SERVICE = SimulationService()
 
+app = FastAPI(title="ComLab V3 Simulation API")
 
-def role_for_agent(agent) -> str:
-    roles = {
-        "I01": "Professor / extinguisher lead",
-        "PA1": "Front aisle student aide",
-        "PA2": "Back aisle student aide",
-        "LC1": "Front exit door holder",
-        "LC2": "Back exit door holder",
-    }
-    return roles.get(agent.agent_id, agent.behavior)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == "/" or self.path.startswith("/?"):
-            self.send_static("index.html", "text/html; charset=utf-8")
-        elif self.path == "/app.css":
-            self.send_static("app.css", "text/css; charset=utf-8")
-        elif self.path == "/app.js":
-            self.send_static("app.js", "text/javascript; charset=utf-8")
-        elif self.path == "/api/state":
-            self.send_json(SERVICE.state())
-        else:
-            self.send_error(404)
+@app.get("/api/state")
+def get_state():
+    return SERVICE.state()
 
-    def do_POST(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        payload = {}
-        if length:
-            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+@app.post("/api/control")
+def post_control(payload: ControlAction):
+    return SERVICE.control(payload.action, payload.config)
 
-        if self.path == "/api/control":
-            self.send_json(SERVICE.control(payload.get("action", "pause"), payload.get("config")))
-        elif self.path == "/api/reset":
-            self.send_json(SERVICE.reset(payload))
-        elif self.path == "/api/compare":
-            self.send_json(SERVICE.compare())
-        else:
-            self.send_error(404)
+@app.post("/api/reset")
+def post_reset(payload: ResetRequest):
+    return SERVICE.reset(payload.config)
 
-    def send_json(self, data):
-        encoded = json.dumps(data).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(encoded)))
-        self.end_headers()
-        self.wfile.write(encoded)
+@app.post("/api/compare")
+def post_compare():
+    return SERVICE.compare()
 
-    def send_static(self, filename: str, content_type: str):
-        path = STATIC_DIR / filename
-        encoded = path.read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(encoded)))
-        self.end_headers()
-        self.wfile.write(encoded)
+# Static file routing
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-    def log_message(self, *_):
-        return
+@app.get("/")
+def read_index():
+    return FileResponse(STATIC_DIR / "index.html")
 
+@app.get("/app.css")
+def read_css():
+    return FileResponse(STATIC_DIR / "app.css")
 
-def create_server(host: str = HOST, port: int = PORT):
-    return ThreadingHTTPServer((host, port), Handler)
-
-
-def main(argv: list[str] | None = None):
-    parser = argparse.ArgumentParser(description="Run the ComLab V3 simulation app.")
-    parser.add_argument("--host", default=HOST)
-    parser.add_argument("--port", type=int, default=PORT)
-    parser.add_argument("--no-browser", action="store_true", help="Start the server without opening a browser tab.")
-    args = parser.parse_args(argv)
-
-    server = create_server(args.host, args.port)
-    url = f"http://{args.host}:{args.port}"
-    print(f"ComLab V3 Python simulation running at {url}")
-    if not args.no_browser:
-        webbrowser.open(url)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nServer stopped.")
-
-
-if __name__ == "__main__":
-    main()
+@app.get("/app.js")
+def read_js():
+    return FileResponse(STATIC_DIR / "app.js")
