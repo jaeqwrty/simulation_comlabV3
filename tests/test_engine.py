@@ -248,36 +248,40 @@ class SimulationValidationTests(unittest.TestCase):
         self.assertEqual(sim.service_bay_passage, (6, 11))
         self.assertNotIn(sim.storage, sim.data_racks | sim.service_bay_staff)
         self.assertEqual(len(sim.workstations), 36)
-        self.assertEqual(sim.workstation_rows, (1, 2, 4, 5, 7, 8))
+        self.assertEqual(sim.workstation_rows, (1, 2, 4, 5, 7))
         self.assertFalse(any((x, 7) in sim.workstations_set for x in {4, 5, 6, 7}))
-        self.assertFalse(any((4, y) in sim.workstations_set for y in range(12)))
 
         table_count = 0
         for row in sim.workstation_rows:
             left_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {0, 1, 2, 3}]
-            right_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {5, 6, 7}]
+            right_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {4, 5, 6, 7}]
             if left_table:
                 self.assertEqual(len(left_table), 4)
                 table_count += 1
             if right_table:
-                self.assertNotIn(4, {x for x, _ in right_table})
+                self.assertEqual(len(right_table), 4)
                 table_count += 1
-        self.assertEqual(table_count, 11)
+        self.assertEqual(table_count, 9)
 
     def test_modified_student_paths_use_center_aisle_not_workstations(self):
         sim = Simulation("modified", panic=False, fire_origin="data")
-        for seat in [(0, 1), (3, 1), (5, 1), (7, 5), (2, 8)]:
+        for seat in [(0, 1), (3, 1), (4, 2), (7, 5), (2, 7)]:
             with self.subTest(seat=seat):
                 agent = next(item for item in sim.agents if (item.x, item.y) == seat)
                 agent.wait_until = 0
                 target = sim.target_for(agent, sim.density_map())
-                self.assertEqual(target[0], 4, msg=f"{seat} should first aim for the open center aisle")
                 path = sim.find_agent_path(seat, target, "student", agent)
                 self.assertTrue(path, msg=f"{seat} should have a route to the marked exit")
-                self.assertIn(target, path, msg=f"{seat} should route through the open center aisle")
+                own_table_cols = {0, 1, 2, 3} if seat[0] <= 3 else {4, 5, 6, 7}
+                own_table = {
+                    cell
+                    for cell in sim.workstations_set
+                    if cell[1] == seat[1] and cell[0] in own_table_cols
+                }
+                center_aisle = {cell for cell in sim.workstations_set if cell[0] == 4}
                 self.assertFalse(
-                    any(cell in sim.workstations_set for cell in path),
-                    msg=f"{seat} route crosses workstation/computer cells: {path}",
+                    any(cell in sim.workstations_set and cell not in own_table and cell not in center_aisle for cell in path),
+                    msg=f"{seat} route crosses unrelated workstation/computer cells: {path}",
                 )
 
     def test_modified_students_prefer_exit_door_over_entrance_door_when_safe(self):

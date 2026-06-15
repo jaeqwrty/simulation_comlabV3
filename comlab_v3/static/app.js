@@ -89,17 +89,12 @@ window.addEventListener("error", (event) => {
 function layoutFor(mode = "current", fireOrigin = "data") {
   const modified = mode === "modified";
   const workstations = [];
-  const rows = modified ? [1, 2, 4, 5, 7, 8] : [1, 2, 4, 5, 7, 8];
+  const rows = modified ? [1, 2, 4, 5, 7] : [1, 2, 4, 5, 7, 8];
   if (modified) {
     [1, 2, 4, 5].forEach((y) => {
-      [0, 1, 2, 3, 5, 6, 7].forEach((x) => {
-        if (!(y === 1 && (x === 6 || x === 7))) workstations.push([x, y]);
-      });
+      [0, 1, 2, 3, 4, 5, 6, 7].forEach((x) => workstations.push([x, y]));
     });
-    [7, 8].forEach((y) => {
-      [0, 1, 2, 3].forEach((x) => workstations.push([x, y]));
-    });
-    workstations.push([5, 8], [6, 8]);
+    [0, 1, 2, 3].forEach((x) => workstations.push([x, 7]));
   } else {
     const cols = [0, 1, 2, 4, 5, 6];
     rows.forEach((y) => cols.forEach((x) => workstations.push([x, y])));
@@ -360,15 +355,25 @@ function syncAgentMotion(agents = state?.agents || []) {
 }
 
 function agentVisualCenter(agent) {
+  const centerForAgent = (x, y) => {
+    const center = visualCenter(x, y);
+    const movingThroughModifiedAisle =
+      state?.mode === "modified" &&
+      x === 4 &&
+      [1, 2, 4, 5, 7].includes(y) &&
+      !["waiting", "retrieving_locker", "peer_wait"].includes(agent.phase);
+    return movingThroughModifiedAisle ? { x: 184, y: center.y } : center;
+  };
+
   const motion = agentMotion.get(agent.id);
   if (!motion) {
-    return visualCenter(agent.x, agent.y);
+    return centerForAgent(agent.x, agent.y);
   }
 
   const duration = stepDurationMs();
   const progress = Math.min(1, (performance.now() - motion.startTime) / duration);
-  const from = visualCenter(motion.from.x, motion.from.y);
-  const to = visualCenter(motion.to.x, motion.to.y);
+  const from = centerForAgent(motion.from.x, motion.from.y);
+  const to = centerForAgent(motion.to.x, motion.to.y);
 
   let x = from.x + (to.x - from.x) * progress;
   let y = from.y + (to.y - from.y) * progress;

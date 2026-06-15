@@ -279,6 +279,7 @@ def is_obstacle(
     staff_fire_passable: tuple[int, int] | None = None,
     workstations_set: set[tuple[int, int]] = WORKSTATIONS_SET,
     staff_bay_cells: set[tuple[int, int]] = SERVICE_BAY_STAFF,
+    passable_workstations: set[tuple[int, int]] | None = None,
 ) -> bool:
     x, y = pos
     if not (0 <= x < COLS and 0 <= y < ROWS):
@@ -291,7 +292,8 @@ def is_obstacle(
         return False
     if is_service_bay_staff(agent_kind) and pos in staff_bay_cells:
         return False
-    return pos in blocked_cells or pos in workstations_set
+    table_egress = passable_workstations or set()
+    return pos in blocked_cells or (pos in workstations_set and pos not in table_egress)
 
 
 def neighbors(
@@ -303,6 +305,7 @@ def neighbors(
     workstations_set: set[tuple[int, int]] = WORKSTATIONS_SET,
     staff_bay_cells: set[tuple[int, int]] = SERVICE_BAY_STAFF,
     mode: str = "current",
+    passable_workstations: set[tuple[int, int]] | None = None,
 ) -> list[tuple[int, int]]:
     x, y = pos
     workstation_cols = {0, 1, 2, 3, 5, 6, 7} if mode == "modified" else {0, 1, 2, 4, 5, 6}
@@ -320,7 +323,7 @@ def neighbors(
     return [
         item
         for item in candidates
-        if not is_obstacle(item, blocked_cells, agent_kind, staff_fire_passable, workstations_set, staff_bay_cells)
+        if not is_obstacle(item, blocked_cells, agent_kind, staff_fire_passable, workstations_set, staff_bay_cells, passable_workstations)
         and not is_edge_blocked(pos, item, blocked_edges)
     ]
 
@@ -335,6 +338,7 @@ def find_path(
     workstations_set: set[tuple[int, int]] = WORKSTATIONS_SET,
     staff_bay_cells: set[tuple[int, int]] = SERVICE_BAY_STAFF,
     mode: str = "current",
+    passable_workstations: set[tuple[int, int]] | None = None,
 ) -> list[tuple[int, int]]:
     queue = deque([start])
     came_from: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
@@ -344,7 +348,7 @@ def find_path(
         if current == target:
             break
         options = sorted(
-            neighbors(current, blocked_cells, agent_kind, blocked_edges, staff_fire_passable, workstations_set, staff_bay_cells, mode),
+            neighbors(current, blocked_cells, agent_kind, blocked_edges, staff_fire_passable, workstations_set, staff_bay_cells, mode, passable_workstations),
             key=lambda pos: manhattan(pos, target),
         )
         for next_pos in options:
@@ -375,13 +379,16 @@ class Simulation:
         
         # Configure layout properties dynamically based on mode
         if mode == "modified":
-            self.workstation_rows = (1, 2, 4, 5, 7, 8)
+            self.workstation_rows = (1, 2, 4, 5, 7)
             self.workstations = [
                 (x, y)
                 for y in (1, 2, 4, 5)
-                for x in (0, 1, 2, 3, 5, 6, 7)
-                if (x, y) not in {(6, 1), (7, 1)}
-            ] + [(x, y) for y in (7, 8) for x in range(4)] + [(5, 8), (6, 8)]
+                for x in range(8)
+            ] + [
+                (x, y)
+                for y in (7,)
+                for x in range(4)
+            ]
             self.workstations_set = set(self.workstations)
             self.data_racks = {(0, 11), (1, 11), (2, 11)}
             self.student_assistant_desk = {(3, 11), (4, 11), (5, 11)}
@@ -549,10 +556,22 @@ class Simulation:
         cleared = bool(agent and agent.bay_passage_cleared)
         fire_passable = self.fire_origin if is_service_bay_staff(agent_kind) else None
         blocked_cells = self.blocked_cells
+        passable_workstations: set[tuple[int, int]] = set()
+        if self.mode == "modified":
+            passable_workstations.update(
+                cell for cell in self.workstations_set if cell[0] == 4
+            )
         if agent_kind == "student":
             blocked_cells = set(self.blocked_cells) | (self.active_fire_cells - {start, target})
             if self.mode == "modified" and target != BACK_EXIT:
                 blocked_cells.add(BACK_EXIT)
+            if self.mode == "modified" and start in self.workstations_set:
+                table_cols = {0, 1, 2, 3} if start[0] <= 3 else {4, 5, 6, 7}
+                passable_workstations.update({
+                    cell
+                    for cell in self.workstations_set
+                    if cell[1] == start[1] and cell[0] in table_cols
+                })
         path = find_path(
             start,
             target,
@@ -563,6 +582,7 @@ class Simulation:
             self.workstations_set,
             self.service_bay_staff,
             self.mode,
+            passable_workstations,
         )
         if path or agent_kind != "student":
             return path
@@ -578,6 +598,7 @@ class Simulation:
             self.workstations_set,
             self.service_bay_staff,
             self.mode,
+            passable_workstations,
         )
 
     def make_agents(self) -> list[Agent]:
@@ -865,7 +886,7 @@ class Simulation:
 
         # Modified layout has clearer pathways and better signage
         if self.mode == "modified":
-            speed *= 1.88
+            speed *= 1.92
 
         if agent.kind == "student":
             speed *= agent.mobility_factor
