@@ -776,35 +776,35 @@ function drawUnifiedStorageBlueprint(ctx, layout) {
   const label = "BAGS & SHELVES";
 
   if (isMod) {
-    const left = visualCenter(storage[0], storage[1]);
-    const x = left.x - CELL / 2 + 4;
-    const y = left.y - CELL / 2 + 4;
-    const w = CELL * 1.25;
-    const h = CELL - 8;
+    const w = 16;
+    const h = 58;
+    const x = LAB_RIGHT - w - 16;
+    const y = MAP_H - h - 56;
 
     ctx.save();
-    ctx.fillStyle = "rgba(245, 158, 11, 0.10)";
-    ctx.strokeStyle = "rgba(251, 191, 36, 0.68)";
+    ctx.fillStyle = "rgba(245, 158, 11, 0.07)";
+    ctx.strokeStyle = "rgba(251, 191, 36, 0.58)";
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 4);
+    ctx.roundRect(x, y, w, h, 3);
     ctx.fill();
     ctx.stroke();
 
     ctx.strokeStyle = "rgba(203, 213, 225, 0.32)";
-    for (let offset = 10; offset <= h - 8; offset += 5) {
+    for (let offset = 9; offset <= h - 8; offset += 8) {
       ctx.beginPath();
-      ctx.moveTo(x + 6, y + offset);
-      ctx.lineTo(x + w - 6, y + offset);
+      ctx.moveTo(x + 3, y + offset);
+      ctx.lineTo(x + w - 3, y + offset);
       ctx.stroke();
     }
 
-    drawBlueprintTag(ctx, "Bags\nShelves", x + w / 2, y - 40, {
+    drawBlueprintTag(ctx, "Bags\nShelves", x - 6, y + h / 2, {
       tone: "amber",
       size: 5.5,
       paddingX: 3,
       paddingY: 2,
-      lineHeight: 6
+      lineHeight: 6,
+      align: "right"
     });
     ctx.restore();
     return;
