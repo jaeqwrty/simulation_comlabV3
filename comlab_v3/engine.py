@@ -389,6 +389,7 @@ class Simulation:
                 for x in (0, 1, 2, 5, 6, 7)
             ]
             self.workstations_set = set(self.workstations)
+            self.table_cells = {cell for cell in self.workstations_set if cell[0] != 4}
             self.data_racks = {(0, 11), (1, 11), (2, 11)}
             self.student_assistant_desk = {(3, 11), (4, 11), (5, 11)}
             self.extra_pcs = set()
@@ -410,6 +411,7 @@ class Simulation:
             self.workstation_rows = WORKSTATION_ROWS
             self.workstations = WORKSTATIONS
             self.workstations_set = WORKSTATIONS_SET
+            self.table_cells = self.workstations_set
             self.data_racks = DATA_RACKS
             self.student_assistant_desk = STUDENT_ASSISTANT_DESK
             self.extra_pcs = EXTRA_PCS
@@ -564,8 +566,11 @@ class Simulation:
             blocked_cells = set(self.blocked_cells) | (self.active_fire_cells - {start, target})
             if self.mode == "modified" and target != BACK_EXIT:
                 blocked_cells.add(BACK_EXIT)
-            if self.mode == "modified" and start in self.workstations_set:
-                table_cols = {0, 1, 2, 3} if start[0] <= 3 else {4, 5, 6, 7}
+            if start in self.workstations_set:
+                if self.mode == "modified":
+                    table_cols = {0, 1, 2, 3} if start[0] <= 3 else {5, 6, 7}
+                else:
+                    table_cols = {0, 1, 2} if start[0] <= 2 else {4, 5, 6}
                 passable_workstations.update({
                     cell
                     for cell in self.workstations_set
@@ -578,7 +583,7 @@ class Simulation:
             agent_kind,
             self.path_edges_for(agent_kind, cleared),
             fire_passable,
-            self.workstations_set,
+            self.table_cells,
             self.service_bay_staff,
             self.mode,
             passable_workstations,
@@ -594,7 +599,7 @@ class Simulation:
             agent_kind,
             self.path_edges_for(agent_kind, cleared),
             fire_passable,
-            self.workstations_set,
+            self.table_cells,
             self.service_bay_staff,
             self.mode,
             passable_workstations,

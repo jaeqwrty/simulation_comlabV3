@@ -49,6 +49,8 @@ let panic = true;
 let running = false;
 let animationFrameId = null;
 let lastPostTime = 0; // Prevent polling from overwriting user interactions
+let controlRequestSeq = 0;
+let stepBusy = false;
 const agentMotion = new Map();
 
 const $ = (id) => document.getElementById(id);
@@ -288,6 +290,7 @@ function applyUrlConfig() {
 }
 
 async function post(path, body = {}) {
+  const requestId = ++controlRequestSeq;
   lastPostTime = Date.now(); // Record user action timestamp
   try {
     const res = await fetch(path, {
@@ -296,13 +299,17 @@ async function post(path, body = {}) {
       body: JSON.stringify(body)
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    state = await res.json();
+    const nextState = await res.json();
+    if (requestId !== controlRequestSeq) return false;
+    state = nextState;
   } catch (err) {
+    if (requestId !== controlRequestSeq) return false;
     state = makeFallbackState(body?.mode || body?.config?.mode || els.mode.value);
     els.statusText.textContent = "Offline preview";
   }
   syncFromState();
   triggerDraw();
+  return true;
 }
 
 async function poll() {
@@ -329,6 +336,41 @@ function stepDurationMs() {
   return Math.max(120, 340 / speed);
 }
 
+function centerForAgentPosition(agent, x, y) {
+  const center = visualCenter(x, y);
+  const movingThroughModifiedAisle =
+    state?.mode === "modified" &&
+    x === 4 &&
+    [1, 2, 4, 5, 7].includes(y) &&
+    !["waiting", "retrieving_locker", "peer_wait"].includes(agent.phase);
+  return movingThroughModifiedAisle ? { x: 184, y: center.y } : center;
+}
+
+function interpolatedMotionPoint(agent, motion, now = performance.now()) {
+  const duration = stepDurationMs();
+  const progress = Math.min(1, (now - motion.startTime) / duration);
+  let x = motion.from.x + (motion.to.x - motion.from.x) * progress;
+  let y = motion.from.y + (motion.to.y - motion.from.y) * progress;
+
+  const isStaff = agent.kind === "custodian" || agent.kind === "assistant";
+  if (isStaff) {
+    const passageExit =
+      motion.fromCell.x === 7 &&
+      motion.toCell.x === 6 &&
+      motion.fromCell.y === 10 &&
+      motion.toCell.y === 10;
+    const verticalCol7 = motion.fromCell.x === 7 && motion.toCell.x === 7;
+
+    if (passageExit) {
+      y = motion.from.y;
+    } else if (verticalCol7) {
+      x = motion.from.x;
+    }
+  }
+
+  return { x, y };
+}
+
 function syncAgentMotion(agents = state?.agents || []) {
   const now = performance.now();
   const activeIds = new Set();
@@ -338,10 +380,13 @@ function syncAgentMotion(agents = state?.agents || []) {
     const prev = agentMotion.get(agent.id);
     const next = { x: agent.x, y: agent.y };
 
-    if (!prev || prev.to.x !== next.x || prev.to.y !== next.y) {
+    if (!prev || prev.toCell.x !== next.x || prev.toCell.y !== next.y) {
+      const from = prev ? interpolatedMotionPoint(agent, prev, now) : centerForAgentPosition(agent, next.x, next.y);
       agentMotion.set(agent.id, {
-        from: prev ? prev.to : next,
-        to: next,
+        from,
+        to: centerForAgentPosition(agent, next.x, next.y),
+        fromCell: prev ? prev.toCell : next,
+        toCell: next,
         startTime: now
       });
     }
@@ -355,46 +400,12 @@ function syncAgentMotion(agents = state?.agents || []) {
 }
 
 function agentVisualCenter(agent) {
-  const centerForAgent = (x, y) => {
-    const center = visualCenter(x, y);
-    const movingThroughModifiedAisle =
-      state?.mode === "modified" &&
-      x === 4 &&
-      [1, 2, 4, 5, 7].includes(y) &&
-      !["waiting", "retrieving_locker", "peer_wait"].includes(agent.phase);
-    return movingThroughModifiedAisle ? { x: 184, y: center.y } : center;
-  };
-
   const motion = agentMotion.get(agent.id);
   if (!motion) {
-    return centerForAgent(agent.x, agent.y);
+    return centerForAgentPosition(agent, agent.x, agent.y);
   }
 
-  const duration = stepDurationMs();
-  const progress = Math.min(1, (performance.now() - motion.startTime) / duration);
-  const from = centerForAgent(motion.from.x, motion.from.y);
-  const to = centerForAgent(motion.to.x, motion.to.y);
-
-  let x = from.x + (to.x - from.x) * progress;
-  let y = from.y + (to.y - from.y) * progress;
-
-  const isStaff = agent.kind === "custodian" || agent.kind === "assistant";
-  if (isStaff) {
-    const passageExit =
-      motion.from.x === 7 &&
-      motion.to.x === 6 &&
-      motion.from.y === 10 &&
-      motion.to.y === 10;
-    const verticalCol7 = motion.from.x === 7 && motion.to.x === 7;
-
-    if (passageExit) {
-      y = from.y;
-    } else if (verticalCol7) {
-      x = from.x;
-    }
-  }
-
-  return { x, y };
+  return interpolatedMotionPoint(agent, motion);
 }
 
 function motionStillAnimating() {
@@ -2098,8 +2109,20 @@ function comparisonAnalysis(data) {
   </div>`;
 }
 
+async function stepOnce() {
+  if (stepBusy) return;
+  stepBusy = true;
+  els.step.disabled = true;
+  try {
+    await post("/api/control", { action: "step", config: config() });
+  } finally {
+    stepBusy = false;
+    els.step.disabled = false;
+  }
+}
+
 els.start.onclick = () => post("/api/control", { action: running ? "pause" : "start", config: config() });
-els.step.onclick = () => post("/api/control", { action: "step", config: config() });
+els.step.onclick = stepOnce;
 els.reset.onclick = () => post("/api/control", { action: "reset", config: config() });
 els.mode.onchange = () => post("/api/reset", config());
 els.fire.onchange = () => post("/api/reset", config());
