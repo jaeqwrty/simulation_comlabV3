@@ -53,57 +53,6 @@ class SimulationValidationTests(unittest.TestCase):
                 with self.subTest(panic=panic, fire_origin=fire_origin):
                     current = self.run_to_completion("current", panic, fire_origin)
                     modified = self.run_to_completion("modified", panic, fire_origin)
-        self.assertNotIn(11, {y for _, y in WORKSTATIONS})
-
-    def test_layout_matches_reference_sketch_service_zones(self):
-        self.assertEqual(INSTRUCTOR_DESK, {(6, 0)})
-        self.assertEqual(DATA_RACKS, {(7, y) for y in range(2, 7)})
-        self.assertEqual(STUDENT_ASSISTANT_DESK, {(7, y) for y in range(7, 10)})
-        self.assertEqual(EXTRA_PCS, {(x, 11) for x in range(4)})
-        self.assertEqual(SHELVES, {(7, 11)})
-        self.assertEqual(fire_origin_for("desk"), (6, 0))
-        self.assertEqual(fire_origin_for("data"), (7, 4))
-        self.assertEqual(fire_origin_for("workstation"), (2, 5))
-        self.assertEqual(fire_origin_for("locker"), (7, 11))
-        self.assertEqual(fire_origin_for("shelves"), (7, 11))
-        self.assertEqual(fire_origin_for("assistant"), (7, 8))
-        self.assertEqual(fire_origin_for("data", "modified"), (0, 7))
-        self.assertEqual(fire_origin_for("locker", "modified"), MODIFIED_LOCKER)
-        self.assertEqual(fire_origin_for("shelves", "modified"), (7, 10))
-        self.assertEqual(fire_origin_for("assistant", "modified"), (0, 8))
-
-    def test_professor_starts_at_instructor_desk_before_simulation_runs(self):
-        sim = Simulation("current", panic=True, fire_origin="data")
-        instructor = next(agent for agent in sim.agents if agent.agent_id == "I01")
-        self.assertEqual(sim.time, 0)
-        self.assertEqual((instructor.x, instructor.y), next(iter(INSTRUCTOR_DESK)))
-        self.assertEqual(instructor.phase, "waiting")
-
-    def test_professor_emergency_protocol(self):
-        sim = Simulation("modified", panic=True, fire_origin="data")
-        instructor = next(agent for agent in sim.agents if agent.agent_id == "I01")
-
-        sim.step()
-        self.assertEqual(instructor.phase, "to_extinguisher")
-
-        while instructor.phase == "to_extinguisher" and not sim.completed:
-            sim.step()
-        self.assertEqual(instructor.phase, "retrieving_extinguisher")
-
-        while instructor.phase == "retrieving_extinguisher" and not sim.completed:
-            sim.step()
-        self.assertEqual(instructor.phase, "suppressing_fire")
-
-        while instructor.phase == "suppressing_fire" and not sim.completed:
-            sim.step()
-        self.assertEqual(instructor.phase, "evacuating")
-
-    def test_modified_layout_is_faster_than_current_for_same_conditions(self):
-        for panic in (True, False):
-            for fire_origin in ("data", "desk"):
-                with self.subTest(panic=panic, fire_origin=fire_origin):
-                    current = self.run_to_completion("current", panic, fire_origin)
-                    modified = self.run_to_completion("modified", panic, fire_origin)
                     self.assertLess(modified.time, current.time)
 
     def test_key_targets_are_reachable(self):
@@ -134,7 +83,7 @@ class SimulationValidationTests(unittest.TestCase):
         self.assertEqual(fire_origin_for("assistant"), (7, 8))
         self.assertEqual(fire_origin_for("data", "modified"), (0, 7))
         self.assertEqual(fire_origin_for("locker", "modified"), MODIFIED_LOCKER)
-        self.assertEqual(fire_origin_for("shelves", "modified"), (7, 10))
+        self.assertEqual(fire_origin_for("shelves", "modified"), MODIFIED_LOCKER)
         self.assertEqual(fire_origin_for("assistant", "modified"), (0, 8))
 
     def test_professor_starts_at_instructor_desk_before_simulation_runs(self):
@@ -271,8 +220,9 @@ class SimulationValidationTests(unittest.TestCase):
 
     def test_modified_layout_keeps_three_computer_tables_and_clear_storage(self):
         sim = Simulation("modified", panic=True, fire_origin="data")
+        self.assertEqual(sim.storage, MODIFIED_LOCKER)
         self.assertEqual(sim.locker, MODIFIED_LOCKER)
-        self.assertEqual(sim.shelves, {(7, 10)})
+        self.assertEqual(sim.shelves, {MODIFIED_LOCKER})
         self.assertFalse(sim.extra_pcs)
 
         for row in sim.workstation_rows:
@@ -283,7 +233,7 @@ class SimulationValidationTests(unittest.TestCase):
 
     def test_modified_extinguishers_are_reachable_from_staff_passage(self):
         sim = Simulation("modified", panic=True, fire_origin="data")
-        self.assertEqual(sim.fire_extinguishers, ((4, 0), (1, 10), (7, 11)))
+        self.assertEqual(sim.fire_extinguishers, ((4, 0), (1, 10), (2, 11)))
 
         cleared_edges = sim.path_edges_for("custodian", bay_passage_cleared=True)
         staff_start = (1, sim.service_bay_passage[1])

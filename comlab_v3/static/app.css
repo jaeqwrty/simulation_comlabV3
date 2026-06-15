@@ -317,13 +317,6 @@ input[type="range"]::-webkit-slider-thumb:hover {
   min-width: 0;
 }
 
-.bottom-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  align-items: stretch;
-}
-
 /* MAP PANEL Styling */
 .map-panel {
   background: var(--panel);
@@ -499,51 +492,6 @@ input[type="range"]::-webkit-slider-thumb:hover {
   border-radius: 50%;
   flex-shrink: 0;
   border: 1px solid rgba(255, 255, 255, 0.15);
-}
-
-.staff-roles {
-  display: grid;
-  gap: 10px;
-  padding: 12px 14px;
-}
-
-.staff-role {
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.45);
-  border: 1px solid rgba(51, 65, 85, 0.45);
-}
-
-.staff-role-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.staff-role-head strong {
-  font-size: 12px;
-  color: var(--text);
-}
-
-.staff-role-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 800;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-}
-
-.staff-role p {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--text-muted);
 }
 
 /* Console Event Logs */

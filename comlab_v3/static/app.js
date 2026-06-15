@@ -74,6 +74,110 @@ const els = {
   comparison: $("comparison")
 };
 
+window.addEventListener("error", (event) => {
+  const ctx = els.map?.getContext("2d");
+  if (!ctx) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, els.map.width, els.map.height);
+  ctx.fillStyle = "#05070d";
+  ctx.fillRect(0, 0, els.map.width, els.map.height);
+  ctx.fillStyle = "#f43f5e";
+  ctx.font = "16px sans-serif";
+  ctx.fillText(`Render error: ${event.message}`, 16, 32);
+});
+
+function layoutFor(mode = "current", fireOrigin = "data") {
+  const modified = mode === "modified";
+  const workstations = [];
+  const rows = [1, 2, 4, 5, 7, 8];
+  const cols = modified ? [1, 2, 3, 5, 6, 7] : [0, 1, 2, 4, 5, 6];
+  rows.forEach((y) => cols.forEach((x) => workstations.push([x, y])));
+
+  const storage = modified ? [1, 11] : [7, 11];
+  const fireOrigins = modified
+    ? { data: [0, 7], desk: [6, 0], workstation: [3, 5], locker: storage, shelves: storage, assistant: [0, 8] }
+    : { data: [7, 4], desk: [6, 0], workstation: [2, 5], locker: storage, shelves: storage, assistant: [7, 8] };
+
+  return {
+    rows: 12,
+    cols: 13,
+    labCols: 9,
+    hallCols: 4,
+    workstations,
+    workstationRows: rows,
+    instructorDesk: [[6, 0]],
+    dataRacks: modified ? [[0, 6], [0, 7]] : [[7, 2], [7, 3], [7, 4], [7, 5], [7, 6]],
+    studentAssistantDesk: modified ? [[0, 8], [0, 9]] : [[7, 7], [7, 8], [7, 9]],
+    extraPcs: modified ? [] : [[0, 11], [1, 11], [2, 11], [3, 11]],
+    shelves: [storage],
+    storage,
+    frontExit: [8, 0],
+    backExit: [8, 11],
+    frontStairs: [12, 1],
+    emergencyStairs: [12, 11],
+    locker: storage,
+    fireOrigin: fireOrigins[fireOrigin] || fireOrigins.data,
+    fireCells: [fireOrigins[fireOrigin] || fireOrigins.data],
+    fireLocations: {
+      data: "Data / communication rack",
+      desk: "Instructor desk",
+      workstation: "Student workstation row",
+      locker: "Locker / bag shelves",
+      assistant: "Student assistant bay"
+    },
+    cell: CELL,
+    hallwayWall: Array.from({ length: 12 }, (_, y) => [8, y]).filter(([x, y]) => !(x === 8 && (y === 0 || y === 11))),
+    partitionWall: modified ? [[0, 6], [0, 7], [0, 8], [0, 9]] : [[7, 2], [7, 3], [7, 4], [7, 5], [7, 6], [7, 7], [7, 8], [7, 9]],
+    serviceBayPassage: modified ? [0, 10] : [7, 10],
+    extinguisherExit: modified ? [4, 0] : [7, 0],
+    extinguisherEntrance: null,
+    extinguisherProfessor: modified ? [4, 0] : [7, 0],
+    extinguisherAssistant: modified ? [1, 10] : [6, 9],
+    extinguisherShelves: modified ? [2, 11] : [6, 11],
+    fireExtinguishers: modified ? [[4, 0], [1, 10], [2, 11]] : [[7, 0], [6, 9], [6, 11]]
+  };
+}
+
+function makeFallbackState(mode = els.mode.value || "current") {
+  const fireOrigin = els.fire.value || "data";
+  const layout = layoutFor(mode, fireOrigin);
+  const agents = layout.workstations.map(([x, y], index) => ({
+    id: `S${String(index + 1).padStart(2, "0")}`,
+    kind: "student",
+    behavior: ["immediate", "locker", "task", "peer"][index % 4],
+    role: "student",
+    x,
+    y,
+    target: [x, y],
+    phase: "waiting",
+    exited: false,
+    stamped_until: 0
+  }));
+
+  return {
+    running: false,
+    mode,
+    panic,
+    fireOrigin,
+    fireCells: layout.fireCells,
+    speed: Number(els.speed.value || 1.5),
+    time: 0,
+    active: agents.length,
+    evacuated: 0,
+    totalAgents: agents.length,
+    trips: 0,
+    doorCollisions: 0,
+    fireDamage: 0,
+    maxHeat: 0,
+    completed: false,
+    agents,
+    heatmap: {},
+    rate: [[0, 0]],
+    events: [],
+    layout
+  };
+}
+
 function visualCenter(x, y) {
   if (state && state.mode === "modified") {
     let cx;
@@ -166,14 +270,34 @@ function config() {
   };
 }
 
+function applyUrlConfig() {
+  const params = new URLSearchParams(window.location.search);
+  const mode = params.get("mode");
+  const fire = params.get("fire");
+  const speed = params.get("speed");
+  const panicParam = params.get("panic");
+
+  if (mode === "current" || mode === "modified") els.mode.value = mode;
+  if (fire && [...els.fire.options].some((option) => option.value === fire)) els.fire.value = fire;
+  if (speed && !Number.isNaN(Number(speed))) els.speed.value = String(Math.min(3, Math.max(0.5, Number(speed))));
+  if (panicParam === "0" || panicParam === "false") panic = false;
+  if (panicParam === "1" || panicParam === "true") panic = true;
+}
+
 async function post(path, body = {}) {
   lastPostTime = Date.now(); // Record user action timestamp
-  const res = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  state = await res.json();
+  try {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    state = await res.json();
+  } catch (err) {
+    state = makeFallbackState(body?.mode || body?.config?.mode || els.mode.value);
+    els.statusText.textContent = "Offline preview";
+  }
   syncFromState();
   triggerDraw();
 }
@@ -181,11 +305,20 @@ async function post(path, body = {}) {
 async function poll() {
   // If user interacted recently, ignore polling state responses to protect local state changes
   if (Date.now() - lastPostTime < 800) return;
-  const res = await fetch("/api/state");
-  state = await res.json();
-  if (Date.now() - lastPostTime < 800) return;
-  syncFromState();
-  triggerDraw();
+  try {
+    const res = await fetch("/api/state");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    state = await res.json();
+    if (Date.now() - lastPostTime < 800) return;
+    syncFromState();
+    triggerDraw();
+  } catch (err) {
+    if (!state) {
+      state = makeFallbackState();
+      syncFromState();
+      triggerDraw();
+    }
+  }
 }
 
 function stepDurationMs() {
@@ -269,7 +402,7 @@ function syncFromState() {
   els.statusDot.classList.toggle("running", running);
   els.statusText.textContent = running ? "Running" : state.completed ? "Complete" : "Ready";
   els.mode.value = state.mode;
-  els.fire.value = state.fireOrigin;
+  els.fire.value = state.fireOrigin === "shelves" ? "locker" : state.fireOrigin;
   els.speed.value = state.speed;
   els.speedText.textContent = `${Number(state.speed).toFixed(1)}x`;
   panic = state.panic;
@@ -278,12 +411,13 @@ function syncFromState() {
   els.layoutTitle.textContent = state.mode === "current" ? "Current Layout" : "Modified Layout";
   els.layoutNote.textContent = state.mode === "current"
     ? "Locker near the Entrance door creates cross-traffic with evacuating agents."
-    : "Safer layout: 3-computer student tables, back-left staff service zone, clear center aisle, and reachable extinguishers.";
+    : "Safer layout: 3-computer student tables, back-left staff service zone, unified bag/shelf storage, clear center aisle, and reachable extinguishers.";
 }
 
 function triggerDraw() {
   if (animationFrameId) cancelAnimationFrame(animationFrameId);
-  animationFrameId = requestAnimationFrame(draw);
+  animationFrameId = null;
+  draw();
 }
 
 function draw() {
@@ -384,33 +518,6 @@ function drawMonitorTile(ctx, x, y, w, h) {
   // small bright strip
   ctx.fillStyle = "rgba(56,189,248,0.18)";
   ctx.fillRect(sx + sw * 0.25, sy + sh + 1, sw * 0.5, 2);
-}
-
-function drawExtraPCs(ctx, x, y, w, h, cols = 3, rows = 2) {
-  // draw a background plate
-  ctx.save();
-  ctx.fillStyle = "rgba(59,130,246,0.06)";
-  try {
-    ctx.roundRect(x, y, Math.max(1, w), Math.max(1, h), 6);
-  } catch (e) {
-    ctx.rect(x, y, Math.max(1, w), Math.max(1, h));
-  }
-  ctx.fill();
-  ctx.strokeStyle = "rgba(96,165,250,0.16)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  const pad = Math.min(4, w * 0.05, h * 0.05);
-  const tileW = Math.max(4, (w - pad * 2 - (cols - 1) * pad) / cols);
-  const tileH = Math.max(4, (h - pad * 2 - (rows - 1) * pad) / rows);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const tx = x + pad + c * (tileW + pad);
-      const ty = y + pad + r * (tileH + pad);
-      drawMonitorTile(ctx, tx, ty, tileW, tileH);
-    }
-  }
-  ctx.restore();
 }
 
 // Draw a single large data rack spanning multiple rows (cell-based positioning)
@@ -539,40 +646,6 @@ function drawWhiteboard(ctx, layout) {
   ctx.restore();
 }
 
-function drawServerRackBlueprint(ctx, x, y) {
-  // Draw a slim server rack with front slots and a glowing status LED
-  const { x: cx, y: cy } = visualCenter(x, y);
-  const px = cx - CELL / 2;
-  const py = cy - CELL / 2;
-
-  // Rack body
-  ctx.fillStyle = "rgba(17, 24, 39, 0.9)";
-  ctx.strokeStyle = "rgba(71, 85, 105, 0.6)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.roundRect(px + 6, py + 6, CELL - 12, CELL - 12, 3);
-  ctx.fill();
-  ctx.stroke();
-
-  // Horizontal 1U slots with subtle depth
-  ctx.strokeStyle = "rgba(99, 102, 241, 0.06)";
-  for (let i = 0; i < 5; i++) {
-    const oy = py + 10 + i * 6;
-    ctx.fillStyle = "rgba(255,255,255,0.02)";
-    ctx.fillRect(px + 8, oy, CELL - 16, 4);
-    ctx.strokeRect(px + 8, oy, CELL - 16, 4);
-  }
-
-  // Side status LED column
-  const ledX = px + CELL - 10;
-  for (let i = 0; i < 3; i++) {
-    ctx.beginPath();
-    ctx.fillStyle = i === 0 ? "#10b981" : i === 1 ? "#f59e0b" : "#ef4444";
-    ctx.arc(ledX, py + 12 + i * 8, 2.2, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
 function drawStaircaseBlueprint(ctx, x, y) {
   const { x: cx, y: cy } = visualCenter(x, y);
   const px = cx - CELL / 2;
@@ -596,25 +669,60 @@ function drawStaircaseBlueprint(ctx, x, y) {
   }
 }
 
-function drawLockerBlueprint(ctx, x, y) {
-  const { x: cx, y: cy } = visualCenter(x, y);
-  const px = cx - CELL / 2;
-  const py = cy - CELL / 2;
-  
-  ctx.fillStyle = "rgba(245, 158, 11, 0.12)";
-  ctx.strokeStyle = "rgba(245, 158, 11, 0.75)";
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.roundRect(px + 4, py + 4, CELL - 8, CELL - 8, 4);
-  ctx.fill();
-  ctx.stroke();
-  
-  // Drawer padlock graphic or clean letter
-  ctx.fillStyle = "rgba(245, 158, 11, 0.85)";
-  ctx.font = "800 8.5px var(--font-sans)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("LOCK", px + CELL / 2, py + CELL / 2);
+function storagePos(layout) {
+  const raw = layout.storage || layout.locker;
+  if (!raw) return null;
+  return Array.isArray(raw) ? raw : [raw[0], raw[1]];
+}
+
+function drawUnifiedStorageBlueprint(ctx, layout) {
+  const storage = storagePos(layout);
+  if (!storage) return;
+
+  const isMod = state && state.mode === "modified";
+  const label = "BAGS & SHELVES";
+
+  if (isMod) {
+    const left = visualCenter(storage[0], storage[1]);
+    const right = visualCenter(storage[0] + 1, storage[1]);
+    const x = left.x - CELL / 2 + 4;
+    const y = left.y - CELL / 2 + 4;
+    const w = right.x + CELL / 2 - left.x - 8;
+    const h = CELL - 8;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(245, 158, 11, 0.10)";
+    ctx.strokeStyle = "rgba(251, 191, 36, 0.68)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 4);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(203, 213, 225, 0.32)";
+    for (let offset = 10; offset <= h - 8; offset += 5) {
+      ctx.beginPath();
+      ctx.moveTo(x + 6, y + offset);
+      ctx.lineTo(x + w - 6, y + offset);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = "rgba(245, 158, 11, 0.30)";
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2, y + 6);
+    ctx.lineTo(x + w / 2, y + h - 6);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(254, 243, 199, 0.94)";
+    ctx.font = "800 7px var(--font-sans)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x + w / 2, y + h / 2);
+    ctx.restore();
+    return;
+  }
+
+  drawStorageBlueprint(ctx, storage, label, "combined");
 }
 
 function drawStorageBlueprint(ctx, pos, label, tone = "amber") {
@@ -623,9 +731,22 @@ function drawStorageBlueprint(ctx, pos, label, tone = "amber") {
   const px = cx - CELL / 2;
   const py = cy - CELL / 2;
   const isShelf = tone === "shelf";
-  const fill = isShelf ? "rgba(148, 163, 184, 0.10)" : "rgba(245, 158, 11, 0.12)";
-  const stroke = isShelf ? "rgba(203, 213, 225, 0.54)" : "rgba(245, 158, 11, 0.72)";
-  const text = isShelf ? "rgba(226, 232, 240, 0.86)" : "rgba(245, 158, 11, 0.92)";
+  const isCombined = tone === "combined";
+  const fill = isCombined
+    ? "rgba(245, 158, 11, 0.10)"
+    : isShelf
+      ? "rgba(148, 163, 184, 0.10)"
+      : "rgba(245, 158, 11, 0.12)";
+  const stroke = isCombined
+    ? "rgba(251, 191, 36, 0.68)"
+    : isShelf
+      ? "rgba(203, 213, 225, 0.54)"
+      : "rgba(245, 158, 11, 0.72)";
+  const text = isCombined
+    ? "rgba(254, 243, 199, 0.94)"
+    : isShelf
+      ? "rgba(226, 232, 240, 0.86)"
+      : "rgba(245, 158, 11, 0.92)";
 
   ctx.save();
   ctx.fillStyle = fill;
@@ -636,16 +757,17 @@ function drawStorageBlueprint(ctx, pos, label, tone = "amber") {
   ctx.fill();
   ctx.stroke();
 
-  if (isShelf) {
-    ctx.strokeStyle = "rgba(203, 213, 225, 0.35)";
+  if (isShelf || isCombined) {
+    ctx.strokeStyle = isCombined ? "rgba(203, 213, 225, 0.32)" : "rgba(203, 213, 225, 0.35)";
     for (let offset = 12; offset <= 22; offset += 5) {
       ctx.beginPath();
       ctx.moveTo(px + 9, py + offset);
       ctx.lineTo(px + CELL - 9, py + offset);
       ctx.stroke();
     }
-  } else {
-    ctx.strokeStyle = "rgba(245, 158, 11, 0.35)";
+  }
+  if (!isShelf) {
+    ctx.strokeStyle = isCombined ? "rgba(245, 158, 11, 0.30)" : "rgba(245, 158, 11, 0.35)";
     ctx.beginPath();
     ctx.moveTo(px + CELL / 2, py + 8);
     ctx.lineTo(px + CELL / 2, py + CELL - 8);
@@ -653,10 +775,15 @@ function drawStorageBlueprint(ctx, pos, label, tone = "amber") {
   }
 
   ctx.fillStyle = text;
-  ctx.font = "800 7.5px var(--font-sans)";
+  ctx.font = isCombined ? "800 6.5px var(--font-sans)" : "800 7.5px var(--font-sans)";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(label, px + CELL / 2, py + CELL / 2);
+  const lines = String(label).split("\n");
+  const lineHeight = isCombined ? 7 : 0;
+  const startY = py + CELL / 2 - ((lines.length - 1) * lineHeight) / 2;
+  lines.forEach((line, index) => {
+    ctx.fillText(line, px + CELL / 2, startY + index * lineHeight);
+  });
   ctx.restore();
 }
 
@@ -877,8 +1004,8 @@ function drawFireExtinguisherBlueprint(ctx, pos) {
       iconX = cx - 13;
       iconY = cy - 7;
     }
-    if (pos[0] === 7 && pos[1] === 11) {
-      iconX = cx + 12;
+    if (pos[0] === 2 && pos[1] === 11) {
+      iconX = cx + 11;
       iconY = cy - 5;
     }
   }
@@ -938,7 +1065,13 @@ function drawClearEgressLanes(ctx, layout) {
   ctx.fill();
   ctx.stroke();
 
+  const storage = visualCenter(1, 11);
   const rear = visualCenter(7, 11);
+  ctx.beginPath();
+  ctx.roundRect(storage.x - 18, storage.y - 16, centerX - storage.x + 34, 32, 8);
+  ctx.fill();
+  ctx.stroke();
+
   ctx.beginPath();
   ctx.roundRect(centerX - 16, rear.y - 16, rear.x - centerX + 34, 32, 8);
   ctx.fill();
@@ -1086,9 +1219,7 @@ function drawEntranceAreaBlueprint(ctx, layout) {
   drawMonitorTile(ctx, custodianTop.x - 24, custodianTop.y - 6, 20, 12);
   drawMonitorTile(ctx, custodianTop.x + 6, custodianTop.y - 6, 20, 12);
 
-  const locker = layout.locker || (isMod ? [1, 11] : [7, 11]);
-  drawStorageBlueprint(ctx, locker, "BAGS");
-  (layout.shelves || []).forEach((pos) => drawStorageBlueprint(ctx, pos, "SHELF", "shelf"));
+  drawUnifiedStorageBlueprint(ctx, layout);
 
   ctx.restore();
 }
@@ -1727,5 +1858,9 @@ els.compare.onclick = async () => {
   </table>`;
 };
 
-poll();
+applyUrlConfig();
+state = makeFallbackState(els.mode.value);
+syncFromState();
+triggerDraw();
+post("/api/reset", config());
 setInterval(poll, 180);

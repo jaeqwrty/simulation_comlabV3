@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import threading
 import time
+from urllib.parse import urlparse
 import webbrowser
 
 from .engine import (
@@ -178,6 +179,7 @@ def layout_payload(mode: str, fire_origin: str):
         "studentAssistantDesk": sorted(sim.student_assistant_desk),
         "extraPcs": sorted(sim.extra_pcs),
         "shelves": sorted(sim.shelves),
+        "storage": sim.storage,
         "frontExit": FRONT_EXIT,
         "backExit": BACK_EXIT,
         "frontStairs": FRONT_STAIRS,
@@ -217,13 +219,14 @@ def role_for_agent(agent) -> str:
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == "/" or self.path.startswith("/?"):
+        request_path = urlparse(self.path).path
+        if request_path == "/":
             self.send_static("index.html", "text/html; charset=utf-8")
-        elif self.path == "/app.css":
+        elif request_path == "/app.css":
             self.send_static("app.css", "text/css; charset=utf-8")
-        elif self.path == "/app.js":
+        elif request_path == "/app.js":
             self.send_static("app.js", "text/javascript; charset=utf-8")
-        elif self.path == "/api/state":
+        elif request_path == "/api/state":
             self.send_json(SERVICE.state())
         else:
             self.send_error(404)
@@ -256,6 +259,7 @@ class Handler(BaseHTTPRequestHandler):
         encoded = path.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-store, max-age=0")
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()
         self.wfile.write(encoded)

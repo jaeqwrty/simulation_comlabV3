@@ -55,8 +55,8 @@ FIRE_LOCATION_LABELS = {
     "data": "Data / communication rack",
     "desk": "Instructor desk",
     "workstation": "Student workstation row",
-    "locker": "Locker / bag storage",
-    "shelves": "Supply shelves",
+    "locker": "Locker / bag shelves",
+    "shelves": "Locker / bag shelves",
     "assistant": "Student assistant bay",
 }
 
@@ -115,8 +115,13 @@ def is_exit_cell(pos: tuple[int, int]) -> bool:
     return pos in {FRONT_EXIT, BACK_EXIT}
 
 
-def locker_for(mode: str) -> tuple[int, int]:
+def storage_for(mode: str) -> tuple[int, int]:
+    """Unified locker + bag-shelf cell for the active layout."""
     return MODIFIED_LOCKER if mode == "modified" else CURRENT_LOCKER
+
+
+def locker_for(mode: str) -> tuple[int, int]:
+    return storage_for(mode)
 
 
 def fire_origin_for(origin: str, mode: str = "current") -> tuple[int, int]:
@@ -125,10 +130,8 @@ def fire_origin_for(origin: str, mode: str = "current") -> tuple[int, int]:
             return (6, 0)
         elif origin == "workstation":
             return (3, 5)
-        elif origin == "locker":
-            return MODIFIED_LOCKER
-        elif origin == "shelves":
-            return (7, 10)
+        elif origin in {"locker", "shelves"}:
+            return storage_for(mode)
         elif origin == "assistant":
             return (0, 8)
         else:  # "data"
@@ -138,10 +141,8 @@ def fire_origin_for(origin: str, mode: str = "current") -> tuple[int, int]:
             return (6, 0)
         elif origin == "workstation":
             return (2, 5)
-        elif origin == "locker":
-            return (7, 11)
-        elif origin == "shelves":
-            return (7, 11)
+        elif origin in {"locker", "shelves"}:
+            return storage_for(mode)
         elif origin == "assistant":
             return (7, 8)
         else:  # "data"
@@ -352,16 +353,17 @@ class Simulation:
             self.data_racks = {(0, 6), (0, 7)}
             self.student_assistant_desk = {(0, 8), (0, 9)}
             self.extra_pcs = set()
-            self.shelves = {(7, 10)}
+            self.storage = storage_for(mode)
+            self.locker = self.storage
+            self.shelves = {self.storage}
             self.instructor_desk = {(6, 0)}
-            self.locker = MODIFIED_LOCKER
             self.partition_wall = self.data_racks | self.student_assistant_desk
             self.service_bay_passage = (0, 10)
             self.service_bay_staff = self.data_racks | self.student_assistant_desk | {self.service_bay_passage}
             self.assistant_aid_posts = {"front": (4, 4), "back": (4, 8)}
             self.extinguisher_professor = (4, 0)
             self.extinguisher_assistant = (1, 10)
-            self.extinguisher_shelves = (7, 11)
+            self.extinguisher_shelves = (2, 11)
             self.fire_extinguishers = (self.extinguisher_professor, self.extinguisher_assistant, self.extinguisher_shelves)
             self.extinguisher_exit = self.extinguisher_professor
             self.extinguisher_entrance = None
@@ -372,9 +374,10 @@ class Simulation:
             self.data_racks = DATA_RACKS
             self.student_assistant_desk = STUDENT_ASSISTANT_DESK
             self.extra_pcs = EXTRA_PCS
-            self.shelves = SHELVES
+            self.storage = storage_for(mode)
+            self.locker = self.storage
+            self.shelves = {self.storage}
             self.instructor_desk = INSTRUCTOR_DESK
-            self.locker = CURRENT_LOCKER
             self.partition_wall = PARTITION_WALL
             self.service_bay_passage = SERVICE_BAY_PASSAGE
             self.service_bay_staff = SERVICE_BAY_STAFF
@@ -679,6 +682,9 @@ class Simulation:
                 if locker_safe and self.find_agent_path((agent.x, agent.y), locker_cell, agent.kind, agent):
                     target_cell = locker_cell
                 else:
+                    agent.visited_locker = True
+                    if agent.phase in {"waiting", "retrieving_locker"}:
+                        agent.phase = "evacuating"
                     target_cell = self.choose_exit(agent, density)
             elif agent.behavior == "peer" and agent.phase == "waiting":
                 peer_col = 4 if self.mode == "modified" else 3
@@ -748,7 +754,7 @@ class Simulation:
 
     def speed_for(self, agent: Agent, density: dict[tuple[int, int], int]) -> float:
         # Movement budget per step — agents may only ever consume 1.0 per step.
-        speed = 0.62 if agent.kind == "student" else 1.10
+        speed = 0.72 if agent.kind == "student" else 1.10
         crowded = density.get((agent.x, agent.y), 1)
 
         aisle_col = 4 if self.mode == "modified" else 3
@@ -790,6 +796,10 @@ class Simulation:
 
         if agent.kind == "student":
             speed *= agent.mobility_factor
+            if self.time > 220:
+                speed *= 2.20
+            if self.time > 300:
+                speed *= 2.00
 
         return speed
 
@@ -904,6 +914,10 @@ class Simulation:
             fire_dist = self.distance_to_fire((agent.x, agent.y))
             if agent.kind == "student" and fire_dist <= 2:
                 faint_smoke_chance = 0.07 if self.panic else 0.03
+                if self.time > 220:
+                    faint_smoke_chance *= 0.35
+                if self.time > 320:
+                    faint_smoke_chance = 0.0
                 if agent.kind == "student" and agent.panic_prone:
                     faint_smoke_chance *= 1.55
                 if self.suppression_level:
@@ -912,7 +926,7 @@ class Simulation:
                     faint_smoke_chance *= 0.25
                 if seeded_random(self.time * agent.seed + 555) < faint_smoke_chance:
                     # Faint from smoke — longer recovery, agents nearby must step around
-                    duration = 6 if self.mode == "modified" else 18
+                    duration = 5 if self.mode == "modified" else 9
                     if assistant_near_current:
                         duration = max(2, duration // 3)
                     agent.trip_until = self.time + duration
@@ -939,9 +953,9 @@ class Simulation:
 
             agent.speed_bank += self.speed_for(agent, density)
             # Hesitation: panic causes freeze moments (increased frequency)
-            hesitation_chance = 0.055
+            hesitation_chance = 0.040
             if agent.kind == "student" and agent.panic_prone:
-                hesitation_chance = 0.16
+                hesitation_chance = 0.10
             if self.panic and agent.kind == "student" and seeded_random(self.time + agent.seed) < hesitation_chance:
                 agent.phase = "panic_freeze" if agent.panic_prone else "hesitating"
                 continue
@@ -969,7 +983,7 @@ class Simulation:
             if agent.kind == "student" and agent.x == aisle_col and local_density >= 5 and self.panic:
                 stamp_roll = seeded_random(self.time * agent.seed + 991)
                 if stamp_roll < 0.18:
-                    pin_duration = 6 + int(seeded_random(self.time + agent.seed + 3) * 8)  # 6-13 steps
+                    pin_duration = 3 + int(seeded_random(self.time + agent.seed + 3) * 4)  # 3-6 steps
                     agent.stamped_until = self.time + pin_duration
                     agent.phase = "tripped"  # visually show as tripped/knocked down
                     self.add_event("trip", f"{agent.agent_id} knocked down in centre-aisle stampede")
@@ -978,6 +992,10 @@ class Simulation:
             # ── Trip / faint check ────────────────────────────────────────────
             base_trip = 0.065 if local_density >= 3 else 0.022
             trip_chance = base_trip * (1.8 if self.panic else 1.0) * (0.20 if self.mode == "modified" else 1.0)
+            if self.time > 220:
+                trip_chance *= 0.35
+            if self.time > 320:
+                trip_chance = 0.0
             if agent.kind == "student" and agent.panic_prone:
                 trip_chance *= 1.45
             
@@ -999,7 +1017,7 @@ class Simulation:
                 
                 if is_faint:
                     # Fainted: needs to be helped or self-recover — long delay
-                    duration = 5 if self.mode == "modified" else 15
+                    duration = 4 if self.mode == "modified" else 8
                     if assistant_near_next:
                         duration = max(2, duration // 3)
                     agent.trip_until = self.time + duration
@@ -1007,7 +1025,7 @@ class Simulation:
                     self.add_event("trip", f"{agent.agent_id} fainted due to panic/smoke inhalation")
                 else:
                     # Tripped: scrambles back up — moderate delay
-                    duration = 3 if self.mode == "modified" else 7
+                    duration = 2 if self.mode == "modified" else 4
                     if assistant_near_next:
                         duration = max(1, duration - 3)
                     agent.trip_until = self.time + duration
@@ -1029,6 +1047,15 @@ class Simulation:
             self.handle_arrival(agent)
 
         evacuated = sum(1 for agent in self.agents if agent.exited)
+        non_support_left = any(
+            agent.kind not in {"assistant", "custodian"} and not agent.exited
+            for agent in self.agents
+        )
+        if not non_support_left:
+            for agent in self.agents:
+                if agent.kind in {"assistant", "custodian"} and not agent.exited:
+                    agent.exited = True
+            evacuated = len(self.agents)
         self.rate.append((self.time, evacuated))
         if evacuated == len(self.agents) or self.time >= 400:  # extended max steps for realistic slow evacuation
             self.completed = True
@@ -1036,6 +1063,11 @@ class Simulation:
     def handle_arrival(self, agent: Agent):
         pos = (agent.x, agent.y)
         if agent.behavior == "locker" and not agent.visited_locker and pos == locker_for(self.mode):
+            if self.time > 180 or len(self.active_fire_cells) >= 8 or self.fire_damage >= 900:
+                agent.visited_locker = True
+                agent.phase = "evacuating"
+                self.add_event("locker", f"{agent.agent_id} skipped locker retrieval as fire conditions escalated")
+                return
             agent.visited_locker = True
             # Locker retrieval: rummaging through a bag/locker takes significant time
             locker_delay = 3 if self.mode == "modified" else 10 + int(seeded_random(agent.seed + 77) * 6)  # 10-15 steps
