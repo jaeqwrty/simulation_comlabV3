@@ -2,7 +2,9 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.understand-anything/
 
 # Optional generated exports if you add screenshots or recordings later.
 *.gif
 *.png
+
