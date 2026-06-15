@@ -311,13 +311,13 @@ def neighbors(
     passable_workstations: set[tuple[int, int]] | None = None,
 ) -> list[tuple[int, int]]:
     x, y = pos
-    workstation_cols = {0, 1, 2, 3, 5, 6, 7} if mode == "modified" else {0, 1, 2, 4, 5, 6}
-    vertical_lanes = {4, 7} if mode == "modified" else {3}
+    workstation_cols = {0, 1, 2, 5, 6, 7} if mode == "modified" else {0, 1, 2, 4, 5, 6}
+    vertical_lanes = {3, 4} if mode == "modified" else {3}
     staff_col = 6 if mode == "modified" else 6
 
     if pos in workstations_set:
         candidates = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-    elif x in workstation_cols:
+    elif x in workstation_cols and 1 <= y <= 8:
         candidates = [(x + 1, y), (x - 1, y)]
         if x in vertical_lanes or (is_service_bay_staff(agent_kind) and x == staff_col and y in {9, 10, 11}):
             candidates.extend([(x, y + 1), (x, y - 1)])
@@ -382,15 +382,11 @@ class Simulation:
         
         # Configure layout properties dynamically based on mode
         if mode == "modified":
-            self.workstation_rows = (1, 2, 4, 5, 7)
+            self.workstation_rows = (1, 2, 4, 5, 7, 8)
             self.workstations = [
                 (x, y)
-                for y in (1, 2, 4, 5)
-                for x in range(8)
-            ] + [
-                (x, y)
-                for y in (7,)
-                for x in range(4)
+                for y in self.workstation_rows
+                for x in (0, 1, 2, 5, 6, 7)
             ]
             self.workstations_set = set(self.workstations)
             self.data_racks = {(0, 11), (1, 11), (2, 11)}
@@ -403,10 +399,10 @@ class Simulation:
             self.partition_wall = self.data_racks | self.student_assistant_desk
             self.service_bay_passage = (6, 11)
             self.service_bay_staff = self.data_racks | self.student_assistant_desk | {self.service_bay_passage}
-            self.assistant_aid_posts = {"front": (4, 4), "back": (4, 8)}
-            self.extinguisher_professor = (4, 0)
-            self.extinguisher_assistant = (6, 10)
-            self.extinguisher_shelves = (7, 10)
+            self.assistant_aid_posts = {"front": FRONT_EXIT, "back": BACK_EXIT}
+            self.extinguisher_professor = (7, 0)
+            self.extinguisher_assistant = (2, 10)
+            self.extinguisher_shelves = (6, 10)
             self.fire_extinguishers = (self.extinguisher_professor, self.extinguisher_assistant, self.extinguisher_shelves)
             self.extinguisher_exit = self.extinguisher_professor
             self.extinguisher_entrance = None
@@ -694,35 +690,11 @@ class Simulation:
         )
 
     def choose_exit(self, agent: Agent, density: dict[tuple[int, int], int]) -> tuple[int, int]:
-        if (
-            self.mode == "modified"
-            and agent.kind == "student"
-            and agent.behavior == "locker"
-            and agent.visited_locker
-            and agent.assigned_exit == "back"
-        ):
-            current = (agent.x, agent.y)
-            if current == BACK_EXIT or self.find_agent_path(current, BACK_EXIT, agent.kind, agent):
-                return BACK_EXIT
-            return FRONT_EXIT
-
-        if self.mode == "modified" and agent.kind == "student":
-            current = (agent.x, agent.y)
-            front_path = self.find_agent_path(current, FRONT_EXIT, agent.kind, agent)
-            if front_path or current == FRONT_EXIT:
-                return FRONT_EXIT
-            if self.distance_to_fire(FRONT_EXIT) <= 2 and self.find_agent_path(current, BACK_EXIT, agent.kind, agent):
-                return BACK_EXIT
-            return FRONT_EXIT
-
-        if self.mode == "modified" and self.fire_origin_name == "assistant":
-            return FRONT_EXIT
-
         if agent.behavior == "locker" and agent.visited_locker:
-            preferred = FRONT_EXIT if self.mode == "modified" else BACK_EXIT
+            preferred = BACK_EXIT
             if self.find_agent_path((agent.x, agent.y), preferred, agent.kind, agent):
                 return preferred
-            return BACK_EXIT if preferred == FRONT_EXIT else FRONT_EXIT
+            return FRONT_EXIT
 
         if agent.assigned_exit == "front":
             preferred = FRONT_EXIT
@@ -1192,7 +1164,7 @@ class Simulation:
             if self.mode == "modified":
                 agent.assigned_exit = "back"
             # Locker retrieval: rummaging through a bag/locker takes significant time
-            locker_delay = 3 if self.mode == "modified" else 10 + int(seeded_random(agent.seed + 77) * 6)  # 10-15 steps
+            locker_delay = 10 + int(seeded_random(agent.seed + 77) * 6)  # 10-15 steps
             agent.wait_until = self.time + locker_delay
             agent.phase = "retrieving_locker"
             self.add_event("locker", f"{agent.agent_id} retrieved belongings from locker")
@@ -1243,7 +1215,7 @@ class Simulation:
         else:
             # Unmanaged door: high collision chance; people push and create jams
             # Current layout has single-width corridor exits — very congested
-            pressure = (0.10 if self.mode == "modified" else 0.40) + (0.18 if self.panic else 0.0) + (0.08 if door == "front" else 0.03)
+            pressure = 0.40 + (0.18 if self.panic else 0.0) + (0.08 if door == "front" else 0.03)
 
         if seeded_random(self.time + agent.seed + self.door_collisions) < pressure:
             self.door_collisions += 1

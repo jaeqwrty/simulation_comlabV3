@@ -89,18 +89,16 @@ window.addEventListener("error", (event) => {
 function layoutFor(mode = "current", fireOrigin = "data") {
   const modified = mode === "modified";
   const workstations = [];
-  const rows = modified ? [1, 2, 4, 5, 7] : [1, 2, 4, 5, 7, 8];
+  const rows = modified ? [1, 2, 4, 5, 7, 8] : [1, 2, 4, 5, 7, 8];
   if (modified) {
-    [1, 2, 4, 5].forEach((y) => {
-      [0, 1, 2, 3, 4, 5, 6, 7].forEach((x) => workstations.push([x, y]));
-    });
-    [0, 1, 2, 3].forEach((x) => workstations.push([x, 7]));
+    const cols = [0, 1, 2, 5, 6, 7];
+    rows.forEach((y) => cols.forEach((x) => workstations.push([x, y])));
   } else {
     const cols = [0, 1, 2, 4, 5, 6];
     rows.forEach((y) => cols.forEach((x) => workstations.push([x, y])));
   }
 
-  const storage = modified ? [7, 11] : [7, 11];
+  const storage = modified ? [7, 9] : [7, 11];
   const fireOrigins = modified
     ? { data: [1, 11], desk: [6, 0], workstation: [2, 5], tv: [5, 0], locker: [5, 0], shelves: [5, 0], assistant: [4, 11] }
     : { data: [7, 4], desk: [6, 0], workstation: [2, 5], tv: [4, 0], locker: [4, 0], shelves: [4, 0], assistant: [7, 8] };
@@ -190,10 +188,10 @@ function makeFallbackState(mode = els.mode.value || "current") {
 function visualCenter(x, y) {
   if (state && state.mode === "modified") {
     let cx;
-    if (x >= 0 && x <= 3) {
-      cx = 38 + x * 36;
-    } else if (x >= 4 && x <= 7) {
-      cx = 218 + (x - 4) * 36;
+    if (x >= 0 && x <= 2) {
+      cx = 68 + x * 34;
+    } else if (x >= 5 && x <= 7) {
+      cx = 222 + (x - 5) * 34;
     } else if (x === 8) {
       cx = EXIT_X;
     } else if (x >= 9) {
@@ -1278,20 +1276,20 @@ function drawWorkstationBenches(ctx, layout) {
     layout.workstationRows.forEach((row) => {
       const y = visualCenter(0, row).y;
       const rowCells = layout.workstations.filter(([, cellY]) => cellY === row);
-      const hasLeftTable = rowCells.some(([x]) => x >= 0 && x <= 3);
+      const hasLeftTable = rowCells.some(([x]) => x >= 0 && x <= 2);
       const hasRightTable = rowCells.some(([x]) => x >= 5 && x <= 7);
 
       if (hasLeftTable) {
         ctx.beginPath();
-        ctx.moveTo(20, y);
-        ctx.lineTo(164, y);
+        ctx.moveTo(68 - 20, y);
+        ctx.lineTo(136 + 20, y);
         ctx.stroke();
       }
 
       if (hasRightTable) {
         ctx.beginPath();
-        ctx.moveTo(234, y);
-        ctx.lineTo(344, y);
+        ctx.moveTo(222 - 20, y);
+        ctx.lineTo(290 + 20, y);
         ctx.stroke();
       }
     });

@@ -254,24 +254,24 @@ class SimulationValidationTests(unittest.TestCase):
         self.assertEqual(sim.service_bay_passage, (6, 11))
         self.assertNotIn(sim.storage, sim.data_racks | sim.service_bay_staff)
         self.assertEqual(len(sim.workstations), 36)
-        self.assertEqual(sim.workstation_rows, (1, 2, 4, 5, 7))
-        self.assertFalse(any((x, 7) in sim.workstations_set for x in {4, 5, 6, 7}))
+        self.assertEqual(sim.workstation_rows, (1, 2, 4, 5, 7, 8))
+        self.assertFalse(any((x, 7) in sim.workstations_set for x in {3, 4}))
 
         table_count = 0
         for row in sim.workstation_rows:
             left_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {0, 1, 2, 3}]
             right_table = [cell for cell in sim.workstations if cell[1] == row and cell[0] in {4, 5, 6, 7}]
             if left_table:
-                self.assertEqual(len(left_table), 4)
+                self.assertEqual(len(left_table), 3)
                 table_count += 1
             if right_table:
-                self.assertEqual(len(right_table), 4)
+                self.assertEqual(len(right_table), 3)
                 table_count += 1
-        self.assertEqual(table_count, 9)
+        self.assertEqual(table_count, 12)
 
     def test_modified_student_paths_use_center_aisle_not_workstations(self):
         sim = Simulation("modified", panic=False, fire_origin="data")
-        for seat in [(0, 1), (3, 1), (4, 2), (7, 5), (2, 7)]:
+        for seat in [(0, 1), (1, 1), (5, 2), (7, 5), (2, 7)]:
             with self.subTest(seat=seat):
                 agent = next(item for item in sim.agents if (item.x, item.y) == seat)
                 agent.wait_until = 0
@@ -310,7 +310,7 @@ class SimulationValidationTests(unittest.TestCase):
 
     def test_modified_extinguishers_are_reachable_from_staff_passage(self):
         sim = Simulation("modified", panic=True, fire_origin="data")
-        self.assertEqual(sim.fire_extinguishers, ((4, 0), (6, 10), (7, 10)))
+        self.assertEqual(sim.fire_extinguishers, ((7, 0), (2, 10), (6, 10)))
 
         cleared_edges = sim.path_edges_for("custodian", bay_passage_cleared=True)
         staff_start = (6, 10)

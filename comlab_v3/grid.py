@@ -22,7 +22,7 @@ EMERGENCY_STAIRS = (12, 11)
 
 CURRENT_LOCKER = (7, 11)
 
-MODIFIED_LOCKER = (7, 11)
+MODIFIED_LOCKER = (7, 9)
 
 DATA_RACKS = {(7, y) for y in range(2, 7)}
 
