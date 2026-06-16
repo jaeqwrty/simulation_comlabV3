@@ -11,3 +11,6 @@ __pycache__/
 # Project scratch and backup directories
 scratch/
 comlab_v3/static_backup/
+
+# Ignore presentation requirements PDF
+CSE 10- Project Presentation Reqs.pdf
