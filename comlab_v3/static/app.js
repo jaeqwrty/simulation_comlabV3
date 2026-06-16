@@ -2157,7 +2157,7 @@ function comparisonAnalysis(data) {
     : `${Math.abs(throughputGain).toFixed(1)} fewer agents/min`;
 
   return `<div class="analysis-note">
-    Modified layout is ${timeText}, with ${waitText} and ${throughputText}. Use these deltas to support the conclusion and recommendations section.
+    Modified layout is ${timeText}, with ${waitText} and ${throughputText}.
   </div>`;
 }
 
