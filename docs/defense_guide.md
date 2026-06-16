@@ -36,7 +36,7 @@ Our system uses a discrete-space (grid) and discrete-time (ticks) Agent-Based Mo
   - Aisles / Walkways (spatial resources).
 * **Queues:**
   - *Door Queues:* Agents waiting for the door cooldown to expire so they can exit.
-  - *Aisle Queues:* Agents waiting for the person in front of them to move because of the 1-agent-per-cell spatial limit.
+  - *Aisle Queues:* Agents slowing down due to crowd congestion in narrow walkways.
 * **State Variables:** 
   - `time` (current tick)
   - `agent.phase` (waiting, evacuating, tripped, fainted)
@@ -46,14 +46,14 @@ Our system uses a discrete-space (grid) and discrete-time (ticks) Agent-Based Mo
 ## 5. Assumptions and Input Data
 Because real-life fire drills in the lab with actual fire are impossible, we rely on established crowd-dynamics assumptions:
 * **Arrival Times (Pack-up Delays):** Instead of "arriving" into the system, agents "wake up" and start moving after a randomized delay. This simulates the time it takes to save work, grab a phone, or pack a bag. "Immediate" agents take 2-4 ticks; "Locker-bound" agents take 6-12 ticks.
-* **Service Times (Movement Speed):** Base speed is 1 cell per tick. This is heavily constrained by the local `density_map`. If 4 agents are surrounding a cell, speed drops by 55% to simulate shuffling. 
+* **Service Times (Movement Speed):** Base speed is $0.72$ cells/tick for students and $1.10$ cells/tick for staff. This is heavily constrained by the local `density_map`. If 3 or more agents are in the same cell, speed drops by $50\%$ to $62\%$ to simulate shuffling. 
 * **Routing Heuristic:** Agents possess perfect knowledge of the room layout but will dynamically reroute using Manhattan-distance Breadth-First Search if a fire blocks their path.
-* **Panic Factor:** Panic does not make people run faster; psychologically, it causes hesitation, pushes (stampedes), and irrational exit choices. We assumed a 15-20% chance of door jamming if a door is not managed by a staff member.
+* **Panic Factor:** Panic does not make people run faster; psychologically, it causes hesitation, pushes (stampedes), and irrational exit choices. We assumed a $43\%$-$61\%$ chance of door jamming if a door is not managed by a staff member and pressure rises.
 
 ## 6. Simulation Implementation (For your Demo)
 *During your demonstration, make sure to highlight these technical aspects:*
-* **Time Progression:** The simulation is tick-based. Explain that clicking "Step" moves time by 1 tick, updating all agent states simultaneously.
-* **Queue Handling:** Show how agents form a line at the door. Explain that `door_cooldown` prevents multiple agents from occupying the exit simultaneously. If a custodian stands at the door, they "hold" it, smoothing the queue. If unmanaged, agents push, trigger a "Door Jam" event, and block the door for 3-5 steps.
+* **Time Progression:** The simulation is tick-based. Explain that clicking "Step" moves time by 1 tick, updating all agent states sequentially.
+* **Queue Handling:** Show how agents form a line at the door. Explain that `door_cooldown` prevents multiple agents from exiting simultaneously. If a custodian or assistant stands at the door, they "hold" it, smoothing the queue. If unmanaged, agents push, trigger a "Door Jam" event, and block the door for 3-5 steps.
 * **Event Processing:** Show the event log on the UI. Point out when someone trips, faints from smoke, or when the fire spreads. 
 
 ## 7. Experimental Results and Analysis
