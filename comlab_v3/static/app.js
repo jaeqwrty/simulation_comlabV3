@@ -2039,6 +2039,51 @@ function drawLegend() {
 
 
 
+let currentEventFilter = 'all';
+
+document.getElementById('eventFilter')?.addEventListener('change', (e) => {
+  currentEventFilter = e.target.value;
+  drawEvents();
+});
+
+// Setup backdrop for modal event log
+let modalBackdrop = document.createElement('div');
+modalBackdrop.className = 'modal-backdrop';
+document.body.appendChild(modalBackdrop);
+
+function toggleEventLogExpand() {
+  const btn = document.getElementById('toggleExpandEvents');
+  const card = document.getElementById('eventLogCard');
+  const isExpanded = card.classList.toggle('expanded');
+  btn.innerHTML = isExpanded 
+    ? '<svg viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>'
+    : '<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>';
+  
+  if (isExpanded) {
+    document.querySelector('.shell').appendChild(card);
+    modalBackdrop.classList.add('visible');
+    // Add escape key listener
+    document.addEventListener('keydown', handleEscClose);
+  } else {
+    const placeholder = document.getElementById('eventLogCardPlaceholder');
+    placeholder.parentNode.insertBefore(card, placeholder.nextSibling);
+    modalBackdrop.classList.remove('visible');
+    document.removeEventListener('keydown', handleEscClose);
+  }
+}
+
+function handleEscClose(e) {
+  if (e.key === 'Escape') toggleEventLogExpand();
+}
+
+modalBackdrop.addEventListener('click', () => {
+  if (document.getElementById('eventLogCard').classList.contains('expanded')) {
+    toggleEventLogExpand();
+  }
+});
+
+document.getElementById('toggleExpandEvents')?.addEventListener('click', toggleEventLogExpand);
+
 // Console style Event Logs with severity badges
 function drawEvents() {
   if (!state.events.length) {
@@ -2046,7 +2091,14 @@ function drawEvents() {
     return;
   }
   
-  els.events.innerHTML = state.events.map(([t, type, message]) => {
+  const filteredEvents = state.events.filter(([t, type, message]) => currentEventFilter === 'all' || type === currentEventFilter);
+  
+  if (!filteredEvents.length) {
+    els.events.innerHTML = '<div class="event" style="justify-content:center;">No incidents match filter.</div>';
+    return;
+  }
+  
+  els.events.innerHTML = filteredEvents.map(([t, type, message]) => {
     let badgeClass = "badge-default";
     let badgeText = type || "log";
     

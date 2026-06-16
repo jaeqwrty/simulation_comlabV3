@@ -79,6 +79,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  position: relative;
 }
 
 /* TOP BAR Styling */
@@ -504,12 +505,64 @@ input[type="range"]::-webkit-slider-thumb:hover {
   height: 140px;
   overflow-y: auto;
   padding: 8px 12px;
+  transition: height 0.2s ease-in-out;
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-muted);
   background: rgba(5, 8, 15, 0.4);
   display: flex;
   flex-direction: column;
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.modal-backdrop.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.event-log-card.expanded {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90vw;
+  max-width: 900px;
+  height: 80vh;
+  max-height: 800px;
+  z-index: 1000;
+  background: rgba(10, 15, 26, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-focus);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.9);
+  border-radius: 12px;
+  padding: 20px 24px;
+}
+
+.event-log-card.expanded:hover {
+  transform: translate(-50%, -50%) translateY(-2px);
+}
+
+.event-log-card.expanded #eventsContainer {
+  height: auto !important;
+  flex: 1;
+}
+
+.event-log-card.expanded .events {
+  height: auto;
+  font-size: 13px;
 }
 
 .event {
