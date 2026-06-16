@@ -124,6 +124,7 @@ class SimulationValidationTests(unittest.TestCase):
     def test_professor_emergency_protocol(self):
         sim = Simulation("modified", panic=True, fire_origin="data")
         instructor = next(agent for agent in sim.agents if agent.agent_id == "I01")
+        instructor.wait_until = 0
 
         sim.step()
         self.assertEqual(instructor.phase, "to_extinguisher")

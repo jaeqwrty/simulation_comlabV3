@@ -88,17 +88,34 @@ class VercelSimulationService:
             self.last_tick = time.monotonic()
             return self.state()
 
-    def compare(self):
+    def compare(self, config: dict[str, Any] | None = None):
         with self.lock:
             panic = self.panic
             fire_origin = self.fire_origin
 
+        replications = 1
+        if config and "replications" in config:
+            try:
+                replications = max(1, int(config["replications"]))
+            except ValueError:
+                pass
+
         result = {}
         for mode in ("current", "modified"):
-            sim = Simulation(mode, panic, fire_origin)
-            while not sim.completed:
-                sim.step()
-            result[mode] = sim.summary()
+            summaries = []
+            for _ in range(replications):
+                sim = Simulation(mode, panic, fire_origin)
+                while not sim.completed:
+                    sim.step()
+                summaries.append(sim.summary())
+            
+            avg_summary = {}
+            for key in summaries[0]:
+                if type(summaries[0][key]) in (int, float):
+                    avg_summary[key] = sum(s[key] for s in summaries) / replications
+                else:
+                    avg_summary[key] = summaries[0][key]
+            result[mode] = avg_summary
         return result
 
     def state(self):
@@ -220,7 +237,7 @@ class handler(BaseHTTPRequestHandler):
         elif path == "/api/reset":
             self.send_json(SERVICE.reset(payload))
         elif path == "/api/compare":
-            self.send_json(SERVICE.compare())
+            self.send_json(SERVICE.compare(payload))
         else:
             self.send_error(404)
 

@@ -36,22 +36,30 @@ def run_scenario(mode: str, panic: bool, fire_origin: str):
     return summary
 
 
-def validate():
+def validate(replications: int = 5):
     rows = []
     failures = []
     for mode, panic, fire_origin in SCENARIOS:
-        summary = run_scenario(mode, panic, fire_origin)
+        summaries = [run_scenario(mode, panic, fire_origin) for _ in range(replications)]
+        
+        avg_summary = {}
+        for key in summaries[0]:
+            if type(summaries[0][key]) in (int, float):
+                avg_summary[key] = sum(s[key] for s in summaries) / replications
+            else:
+                avg_summary[key] = summaries[0][key]
+
         row = {
             "mode": mode,
             "panic": panic,
             "fire_origin": fire_origin,
-            **summary,
+            **avg_summary,
         }
         rows.append(row)
-        if row["inside"] != 0:
-            failures.append(f"{mode}/{panic}/{fire_origin}: {row['inside']} agents still inside")
+        if row["inside"] > 0:
+            failures.append(f"{mode}/{panic}/{fire_origin}: {row['inside']:.1f} agents still inside on average")
         if row["time"] >= 400:
-            failures.append(f"{mode}/{panic}/{fire_origin}: reached 400-step max limit (no full evacuation)")
+            failures.append(f"{mode}/{panic}/{fire_origin}: reached 400-step max limit on average")
 
     current_by_condition = {
         (row["panic"], row["fire_origin"]): row
@@ -67,7 +75,7 @@ def validate():
         if row["time"] >= current["time"]:
             failures.append(
                 f"modified/{row['panic']}/{row['fire_origin']}: "
-                f"{row['time']}s was not faster than current {current['time']}s"
+                f"{row['time']:.1f}s was not faster than current {current['time']:.1f}s"
             )
 
     return rows, failures
@@ -100,10 +108,10 @@ def print_validation(rows):
     for row in rows:
         print(
             f"{row['mode']:<9} {str(row['panic']):<5}  {row['fire_origin']:<11}  "
-            f"{row['time']:>4}  {row['evacuated']:>9}  "
+            f"{row['time']:>4.0f}  {row['evacuated']:>9.0f}  "
             f"{row['average_wait_time']:>8.2f}  {row['average_queue_length']:>9.2f}  "
             f"{row['throughput_per_minute']:>10.2f}  {row['exit_utilization_percent']:>8.2f}  "
-            f"{row['trips']:>5}  {row['door_collisions']:>5}  {row['max_heat']:>8}"
+            f"{row['trips']:>5.1f}  {row['door_collisions']:>5.1f}  {row['max_heat']:>8.2f}"
         )
 
 
@@ -121,9 +129,10 @@ def print_benchmark(result):
 def main():
     parser = argparse.ArgumentParser(description="Validate and benchmark the ComLab V3 simulation engine.")
     parser.add_argument("--iterations", type=int, default=1, help="Benchmark matrix iterations.")
+    parser.add_argument("--replications", type=int, default=5, help="Number of replications per scenario for validation.")
     args = parser.parse_args()
 
-    rows, failures = validate()
+    rows, failures = validate(args.replications)
     print_validation(rows)
     if failures:
         print()

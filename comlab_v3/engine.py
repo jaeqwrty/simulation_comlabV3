@@ -660,24 +660,41 @@ class Simulation:
                 )
             )
 
+        def make_staff(aid: str, kind: str, x: int, y: int, seed: int, exit_assign: str | None = None) -> Agent:
+            if kind == "instructor":
+                delay = 3 + int(seeded_random(seed) * 5)
+            elif kind == "assistant":
+                delay = 2 + int(seeded_random(seed) * 4)
+            else: # custodian
+                delay = 1 + int(seeded_random(seed) * 3)
+            
+            panic_prone = seeded_random(seed + 201) < 0.20
+            mobility_factor = 0.80 + seeded_random(seed + 301) * 0.30
+            
+            if self.panic and panic_prone:
+                delay += 1 + int(seeded_random(seed + 401) * 3)
+                mobility_factor *= 0.85
+
+            return Agent(aid, kind, kind, x, y, seed, wait_until=delay, target=(x, y), phase="waiting", assigned_exit=exit_assign, panic_prone=panic_prone, mobility_factor=mobility_factor)
+
         if self.mode == "modified":
             agents.extend(
                 [
-                    Agent("I01", "instructor", "instructor", 6, 0, 101, wait_until=1, target=(6, 0), phase="waiting"),
-                    Agent("PA1", "assistant", "assistant", 3, 11, 102, wait_until=1, target=(3, 11), phase="waiting", assigned_exit="front"),
-                    Agent("PA2", "assistant", "assistant", 4, 11, 103, wait_until=1, target=(4, 11), phase="waiting", assigned_exit="back"),
-                    Agent("LC1", "custodian", "custodian", 0, 10, 104, wait_until=1, target=(0, 10), phase="waiting", assigned_exit="front"),
-                    Agent("LC2", "custodian", "custodian", 2, 10, 105, wait_until=1, target=(2, 10), phase="waiting", assigned_exit="back"),
+                    make_staff("I01", "instructor", 6, 0, 101),
+                    make_staff("PA1", "assistant", 3, 11, 102, exit_assign="front"),
+                    make_staff("PA2", "assistant", 4, 11, 103, exit_assign="back"),
+                    make_staff("LC1", "custodian", 0, 10, 104, exit_assign="front"),
+                    make_staff("LC2", "custodian", 2, 10, 105, exit_assign="back"),
                 ]
             )
         else:
             agents.extend(
                 [
-                    Agent("I01", "instructor", "instructor", 6, 0, 101, wait_until=1, target=(6, 0), phase="waiting"),
-                    Agent("PA1", "assistant", "assistant", 7, 8, 102, wait_until=1, target=(7, 8), phase="waiting", assigned_exit="front"),
-                    Agent("PA2", "assistant", "assistant", 7, 9, 103, wait_until=1, target=(7, 9), phase="waiting", assigned_exit="back"),
-                    Agent("LC1", "custodian", "custodian", 7, 3, 104, wait_until=1, target=(7, 3), phase="waiting", assigned_exit="front"),
-                    Agent("LC2", "custodian", "custodian", 7, 5, 105, wait_until=1, target=(7, 5), phase="waiting", assigned_exit="back"),
+                    make_staff("I01", "instructor", 6, 0, 101),
+                    make_staff("PA1", "assistant", 7, 8, 102, exit_assign="front"),
+                    make_staff("PA2", "assistant", 7, 9, 103, exit_assign="back"),
+                    make_staff("LC1", "custodian", 7, 3, 104, exit_assign="front"),
+                    make_staff("LC2", "custodian", 7, 5, 105, exit_assign="back"),
                 ]
             )
         return agents
