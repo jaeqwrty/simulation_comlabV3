@@ -3,34 +3,37 @@
 ## Part 2: The World Representation - Grids and Spatial Dynamics
 
 ### 2.1 The `Grid` Architecture
-The physical world of V3 is governed by the `Grid` class. This class acts as the ultimate arbiter of physical reality. It is a 2D array matrix where each cell has coordinates `(x, y)`.
+The physical world of V3 is governed by the matrix definitions inside `comlab_v3/engine.py` (with helpers in `comlab_v3/grid.py`). This grid maps out the physical reality of the computer lab. It is a 2D matrix where each cell has coordinates `(x, y)`.
 
-#### 2.1.1 Cell Types and Enums
-Cells are not merely empty or full; they carry semantic meaning. A cell can be:
-- `EMPTY`: A traversable space.
-- `WALL`: An impassable structural boundary.
-- `DOOR`: A traversable space that represents an exit or transition.
-- `DESK` / `CHAIR`: Impassable obstacles that dictate the layout of the lab.
+#### 2.1.1 Cell Types and Layout
+Cells have semantic classifications defined by static sets:
+- **Corridors and Hallways**: Traversable areas.
+- **Walls**: Impassable structural boundaries (`HALLWAY_WALL`).
+- **Exits**: Passable targets (`FRONT_EXIT`, `BACK_EXIT`).
+- **Desks / Obstacles**: Impassable furniture (`WORKSTATIONS`, `DATA_RACKS`, `INSTRUCTOR_DESK`, `STUDENT_ASSISTANT_DESK`).
 
-When the grid is initialized, it reads a layout definition (often a 2D array of integers or a string map) and populates its internal matrix. This matrix is heavily queried every frame by every agent, making its lookup efficiency ($O(1)$) critical.
+When the simulation is initialized, it sets up these blocked coordinate sets depending on the mode (`current` vs `modified`). Lockers and fire origins are mapped dynamically based on the active layout.
 
-### 2.2 Collision Detection and Mutual Exclusion
-In physical reality, two human beings cannot occupy the same 0.5m x 0.5m square. The `Grid` enforces this via an agent-mapping layer. While the static grid holds the walls, a dynamic map tracks which agent is in which cell.
+---
 
-When an agent attempts to move from `(x1, y1)` to `(x2, y2)`, the engine queries the grid:
-1. Is `(x2, y2)` a Wall or Desk? If yes, movement rejected.
-2. Is `(x2, y2)` occupied by another Agent? If yes, movement rejected (or handled as a collision).
+### 2.2 Crowd Congestion & Overlap Modeling
+In physical reality, two human beings cannot occupy the exact same spot. However, rather than enforcing rigid, absolute grid mutual exclusion (which would cause lock-ups on a discrete grid), V3 models crowd dynamics through a **Density-Dependent Congestion Model**:
 
-#### 2.2.1 The Queueing Effect
-Because of this strict mutual exclusion, crowd dynamics naturally emerge without complex flocking algorithms (like Boids). If an agent stops in a 1-cell-wide corridor, the agent behind them cannot step into their cell. That agent stops. The agent behind *them* stops. This creates a shockwave queue, identical to real-world traffic jams or doorway crushes during a fire.
+1. **Cell Overlapping**: Multiple agents *can* occupy the same `(x, y)` coordinate.
+2. **Speed Penalty**: The engine tracks local crowd density using a `density_map()`. If a cell is crowded, any agent standing in or entering it suffers a severe speed reduction (`speed_for` multiplier is halved for density $\ge 3$, and reduced to $38\%$ for density $\ge 5$).
+3. **Tripping and Stampede Risk**: Squeezing many agents into a single corridor cell increases the probability of tripping, fainting, or entering a knocked-down "stampede pin" state.
+
+#### 2.2.1 The Bottleneck Effect
+Even though physical exclusion is not strictly blocked at the grid level, realistic bottlenecks naturally emerge. If a cell contains a dense cluster of agents, they all slow to a crawl, creating a shockwave bottleneck that propagates backward. This closely mirrors real-world crowd flow where high-density packing leads to slow, shuffling movement near exit doors.
+
+---
 
 ### 2.3 The Cellular Automata of Fire
-Fire is not static in V3; it is a dynamic, spreading entity governed by Cellular Automata (CA) principles. 
-Every few ticks, the fire evaluates its neighbors (up, down, left, right). Based on the flammability of the neighboring cell (e.g., a wooden desk vs an empty floor) and a propagation probability, the fire expands.
+Fire is a dynamic, spreading entity governed by Cellular Automata (CA) principles:
+- **Evaluation Interval**: Fire updates every $7$ ticks.
+- **Neighbor Expansion**: It spreads cardinally (up, down, left, right) to adjacent lab cells.
+- **Calculated Probability**: The spread is a function of fuel density (wooden desks and data racks ignite faster than floors), heat history, occupant congestion, and suppression levels.
 
-#### 2.3.1 Smoke and Heat Maps
-Beyond the immediate flames, the grid also manages invisible "fields":
-- **Heat Maps**: Cells adjacent to fire increase in heat.
-- **Smoke Maps**: Smoke propagates faster than fire and can reduce agent visibility. 
-
-When an agent requests a path to the exit, it isn't just looking for the shortest distance; it queries the grid's heat map to avoid pathing directly through an inferno, forcing agents to dynamically reroute as the fire spreads.
+#### 2.3.1 Smoke and Heat Exposure
+The simulation accumulates a historical heatmap of agent densities and fire presence. Proximity to fire (Manhattan distance $\le 3$) reduces agent speed and exposes them to smoke inhalation, causing health decay and potential fainting.
+When fire spreads, the global path cache is cleared to force agents to re-evaluate their egress routes.

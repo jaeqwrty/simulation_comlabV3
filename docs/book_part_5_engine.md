@@ -2,30 +2,32 @@
 
 ## Part 5: The Simulation Engine - The Heartbeat of V3
 
-### 5.1 The `SimulationEngine` Lifecycle
-The `SimulationEngine` is the conductor of the orchestra. It does not contain the logic for how a person moves (that's the `Agent`), nor does it store the physical walls (that's the `Grid`). Instead, it iterates through time and forces all systems to update.
+### 5.1 The `Simulation` Class Lifecycle
+The `Simulation` class in `comlab_v3/engine.py` manages the main loop of the Agent-Based Model (ABM). Rather than managing visual rendering, it processes the physics, kinematics, and logical steps of time.
 
-The lifecycle of a single "tick" or "frame" looks like this:
-1. **Spawn Phase**: (If applicable) inject new agents into the simulation.
-2. **Fire Update**: The cellular automata rules for fire spread are calculated and applied.
-3. **Agent Intention Phase**: Every agent calculates its desired next move (adds to `speed_bank`, requests pathing).
-4. **Conflict Resolution Phase**: The engine looks at all requested moves.
-5. **Commit Phase**: Moves are finalized, grid state is updated, agents enter/exit the lab.
-6. **Data Collection**: Metrics (evacuated count, casualties, average exit time) are recorded.
+The lifecycle of a single "tick" or "frame" inside the `step()` method executes the following stages:
+1. **Time Advancement**: Increment simulation time `self.time`.
+2. **Density Mapping**: Compute the spatial distribution of agents on the grid using `density_map()`, updating the heat map.
+3. **Fire Progression**: `spread_fire` evaluates burning cells and propagates fire to adjacent cells every $7$ ticks, based on suppression levels and fuel weights.
+4. **Health Decay**: Proximity to fire (Manhattan distance $\le 3$) inflicts health penalties on agents, flagging them as casualties if health drops to $\le 0$.
+5. **State Recovery**: Students tripped or fainted check if their immobilizing timers have expired to stand back up.
+6. **Role Actions**: Instructors, assistants, and custodians progress their unique task sequences (retrieving extinguishers, holding doors, aiding students).
+7. **Target & Path updates**: Verify if agent targets have changed, and compute paths for agents without cached moves.
+8. **Egress Step execution**: Iterate through all active agents to accumulate speed bank, roll for tripping/fainting risks, and update coordinates to their next step.
+9. **Exit evaluation**: Move agents who reached the exit into the evacuated state, handle door jams, and verify if the simulation has completed.
 
-### 5.2 Conflict Resolution: The Collision Engine
-Step 4 is the most crucial part of the engine. Suppose Agent A and Agent B both want to move into Cell (5, 5). Who wins?
+---
 
-If V3 simply processed agents in a list sequentially (`for agent in agents: agent.move()`), the agent at index 0 would always win. This creates a severe bias based on memory allocation order, entirely ruining the physical realism.
+### 5.2 Agent Roster & Sequential Step Processing
+All agents are initialized at the start of the simulation by `self.make_agents()`. **There is no dynamic spawning during the simulation run.** 
 
-Instead, V3 uses a **Simultaneous Resolution** approach:
-- All agents submit their "desired next cell".
-- The engine groups these requests by target cell.
-- If a cell has 1 requester, the move is approved.
-- If a cell has >1 requesters, a deterministic conflict resolution fires. This might be based on:
-  - Momentum (who is moving faster?)
-  - Random Seed (deterministic tie-breaker).
-  - Push Dynamics (can they squeeze? In V3, usually one is denied and stays in place).
+During step execution, agents are processed sequentially in a simple loop:
+- The order of movement is dictated by their position in the `self.agents` roster list (seeded by layout workstations).
+- Rather than a complex simultaneous conflict resolution engine, V3 relies on **sequential step updates**:
+  - An agent moves into `next_cell` if they have speed budget, popping the coordinate.
+  - Squeezing multiple agents into the same cell is physically permitted by the grid but penalized mathematically: local congestion decreases movement speed and increases tripping/fainting chances during their sequential evaluation.
+
+---
 
 ### 5.3 Benchmarking and Headless Execution
 Because the engine is entirely decoupled from the UI, it can be run "headlessly" in a `while` loop until all agents exit. 

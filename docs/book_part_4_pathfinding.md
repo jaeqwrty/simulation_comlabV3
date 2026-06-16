@@ -2,24 +2,38 @@
 
 ## Part 4: The Pathfinding - Algorithms and Evacuation Routing
 
-### 4.1 The Role of the `Pathfinder`
-In an emergency, human beings rarely calculate the mathematically perfect shortest path. However, in an ABM, we must provide agents with a baseline intention. The `Pathfinder` class is responsible for computing the route an agent wishes to take from their current `(x, y)` to an `Exit`.
+### 4.1 Heuristically-Ordered BFS
+In an emergency, human beings rarely calculate the mathematically perfect shortest path. In V3, pathfinding is implemented as a module-level function `find_path` inside `comlab_v3/engine.py` (with structural helpers in `comlab_v3/pathfinding.py`). 
 
-### 4.2 Greedy BFS vs A*
-V3 utilizes a combination of pathfinding algorithms, depending on the computational budget and the agent's state:
-1. **Greedy Best-First Search (BFS)**: This is heavily used because it is fast. It uses a heuristic (usually Manhattan distance or Euclidean distance to the door) to guess the best next step. It operates under the assumption that agents "greedily" step towards the door. While it can get stuck in U-shaped concave obstacles, computer labs usually have rectangular desks where Greedy BFS performs exceptionally well.
-2. **A* Search (A-Star)**: For agents that are completely blocked by a complex arrangement of fire and debris, the engine can fall back to A*. A* guarantees the shortest path by balancing the distance already traveled ($g(n)$) and the heuristic distance to the goal ($h(n)$). It is computationally heavier but ensures agents don't walk into dead ends if a path exists.
+The engine uses a **Heuristically-Ordered Breadth-First Search (BFS)**:
+1. It initializes a standard FIFO double-ended queue (`deque`) starting with the agent's current position.
+2. When expanding a node's neighbors, it sorts them in ascending order of their Manhattan distance to the destination target:
+   \[H(v, T) = |x_v - x_T| + |y_v - y_T|\]
+3. The sorted list of neighbors is appended to the queue.
 
-### 4.3 Dynamic Recalculation
-Pathfinding in V3 is not a one-and-done operation. 
-If an agent computes a path at Tick 1, by Tick 50, a fire might have spread across that path, or a group of students might have tripped, creating a human barricade.
+This sorting forces the search to explore pathways heading towards the exit first, creating a greedy search behavior that matches realistic human egress navigation while remaining complete.
 
-V3 handles this through **Path Invalidation**:
-- As an agent steps forward, it looks at the next $N$ steps of its cached path.
-- It checks the `Grid` to see if those cells are now categorized as `FIRE` or `BLOCKED`.
-- If blocked, the agent discards its cached path and triggers a recalculation.
-- To prevent CPU spikes (where 50 agents all recalculate A* on the exact same frame), the engine queues these recalculations or applies a small heuristic jitter.
+---
 
-### 4.4 The "Doorway Funnel" Algorithm Challenge
-The most difficult aspect of simulation pathfinding is the doorway. When 30 agents all target a single 1-cell wide door, their paths converge. 
-If they simply follow shortest-path, they will all try to enter the exact same cell simultaneously. The V3 engine resolves this via strict queueing (discussed in Part 5), but the Pathfinder helps by sometimes targeting "Doorway Adjacent" cells—creating a natural semi-circle funnel rather than a straight line of blocked agents.
+### 4.2 Dynamic Target Selection
+Pathfinding is guided by dynamic targets returned by the `target_for()` method every step:
+- **Students**: Target their lockers if safe and behavior dictates it. Once locker retrieval is complete (or if the locker is blocked by fire), they select an exit using `choose_exit()` based on local densities.
+- **Instructors**: Target the professor's fire extinguisher first, move to the fire origin to suppress it, and then switch targets to the exits.
+- **Assistants / Custodians**: Navigate to exit doors to hold them, or move to distressed (tripped/fainted) students to assist them.
+
+---
+
+### 4.3 Path Caching & Fire Invalidation
+Because running BFS for dozens of agents every frame is computationally expensive, V3 implements a global path cache:
+
+*   **Caching (`path_cache`)**: Paths are stored using the tuple `(start, target, kind, bay_passage_cleared)` as a key. If another agent of the same kind needs to navigate between the same cells, it retrieves the path in $O(1)$ time.
+*   **Cache Clearing**: When fire spreads, the entire `self.path_cache` is cleared. The next time an agent needs to move, if they do not have a path cached on their agent instance, they compute a new route using `find_agent_path` which treats active fire cells as blocked obstacles.
+*   **Tunnel Vision**: If an agent already has a computed path stored on their instance (`agent.path`), they will continue following it even if fire spreads across it, unless their target changes or they recalculate. This simulates realistic panic-induced tunnel vision.
+
+---
+
+### 4.4 Center Aisle Waypoint Routing
+To prevent agents from getting stuck in U-shaped workspace layouts, the engine implements center aisle waypoint routing:
+- If `should_route_via_center_aisle` evaluates to `True`, the agent does not path directly to the exit.
+- Instead, they route to a waypoint column (the center aisle: $x = 3$ or $x = 4$ depending on mode).
+- Once they reach the center aisle, they proceed directly to their exit target, simulating a structured egress flow out of workstation bays.
