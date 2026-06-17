@@ -24,8 +24,8 @@ SCENARIOS = [
 ]
 
 
-def run_scenario(mode: str, panic: bool, fire_origin: str):
-    sim = Simulation(mode, panic, fire_origin)
+def run_scenario(mode: str, panic: bool, fire_origin: str, random_seed: int = 0):
+    sim = Simulation(mode, panic, fire_origin, random_seed=random_seed)
     steps = 0
     while not sim.completed:
         sim.step()
@@ -40,7 +40,10 @@ def validate(replications: int = 5):
     rows = []
     failures = []
     for mode, panic, fire_origin in SCENARIOS:
-        summaries = [run_scenario(mode, panic, fire_origin) for _ in range(replications)]
+        summaries = [
+            run_scenario(mode, panic, fire_origin, random_seed=replication)
+            for replication in range(replications)
+        ]
         
         avg_summary = {}
         for key in summaries[0]:

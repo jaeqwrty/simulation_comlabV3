@@ -97,14 +97,14 @@ class VercelSimulationService:
         if config and "replications" in config:
             try:
                 replications = max(1, int(config["replications"]))
-            except ValueError:
+            except (TypeError, ValueError):
                 pass
 
         result = {}
         for mode in ("current", "modified"):
             summaries = []
-            for _ in range(replications):
-                sim = Simulation(mode, panic, fire_origin)
+            for replication in range(replications):
+                sim = Simulation(mode, panic, fire_origin, random_seed=replication)
                 while not sim.completed:
                     sim.step()
                 summaries.append(sim.summary())

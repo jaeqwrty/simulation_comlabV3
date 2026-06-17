@@ -32,6 +32,16 @@ const WORKSTATION_X = new Map([
   [5, 230],
   [6, 270]
 ]);
+const MODIFIED_WORKSTATION_X = new Map([
+  [0, 44],
+  [1, 92],
+  [2, 140],
+  [5, 222],
+  [6, 270],
+  [7, 318]
+]);
+const MODIFIED_LEFT_AISLE_X = 176;
+const MODIFIED_CENTER_AISLE_X = 196;
 const AISLE_X = 156;
 const EXIT_X = LAB_RIGHT;
 const BASE_ROW_Y = new Map(Array.from({ length: 12 }, (_, y) => [y, y * CELL + CELL / 2]));
@@ -52,6 +62,7 @@ let lastPostTime = 0; // Prevent polling from overwriting user interactions
 let controlRequestSeq = 0;
 let stepBusy = false;
 const agentMotion = new Map();
+let agentMotionMode = null;
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -66,6 +77,7 @@ const els = {
   fire: $("fireSelect"),
   speed: $("speedRange"),
   speedText: $("speedText"),
+  replications: $("replicationsInput"),
   compare: $("compareBtn"),
   statusDot: $("statusDot"),
   statusText: $("statusText"),
@@ -91,16 +103,18 @@ window.addEventListener("error", (event) => {
 function layoutFor(mode = "current", fireOrigin = "data") {
   const modified = mode === "modified";
   const workstations = [];
-  const rows = modified ? [1, 2, 4, 5, 7, 8] : [1, 2, 4, 5, 7, 8];
+  const rows = modified ? [1, 2, 4, 5, 7] : [1, 2, 4, 5, 7, 8];
   if (modified) {
-    const cols = [0, 1, 2, 5, 6, 7];
-    rows.forEach((y) => cols.forEach((x) => workstations.push([x, y])));
+    [1, 2, 4, 5].forEach((y) => {
+      [0, 1, 2, 3, 4, 5, 6, 7].forEach((x) => workstations.push([x, y]));
+    });
+    [0, 1, 2, 3].forEach((x) => workstations.push([x, 7]));
   } else {
     const cols = [0, 1, 2, 4, 5, 6];
     rows.forEach((y) => cols.forEach((x) => workstations.push([x, y])));
   }
 
-  const storage = modified ? [7, 9] : [7, 11];
+  const storage = modified ? [7, 11] : [7, 11];
   const fireOrigins = modified
     ? { data: [1, 11], desk: [6, 0], workstation: [2, 5], tv: [5, 0], locker: [5, 0], shelves: [5, 0], assistant: [4, 11] }
     : { data: [7, 4], desk: [6, 0], workstation: [2, 5], tv: [4, 0], locker: [4, 0], shelves: [4, 0], assistant: [7, 8] };
@@ -147,6 +161,15 @@ function layoutFor(mode = "current", fireOrigin = "data") {
   };
 }
 
+function drawWorkstationRowSpan(ctx, rowCells, row, padding) {
+  if (!rowCells.length) return;
+  const centers = rowCells.map(([cellX]) => visualCenter(cellX, row).x);
+  ctx.beginPath();
+  ctx.moveTo(Math.min(...centers) - padding, visualCenter(rowCells[0][0], row).y);
+  ctx.lineTo(Math.max(...centers) + padding, visualCenter(rowCells[0][0], row).y);
+  ctx.stroke();
+}
+
 function makeFallbackState(mode = els.mode.value || "current") {
   const fireOrigin = els.fire.value || "data";
   const layout = layoutFor(mode, fireOrigin);
@@ -171,8 +194,9 @@ function makeFallbackState(mode = els.mode.value || "current") {
     fireCells: layout.fireCells,
     speed: Number(els.speed.value || 1.5),
     time: 0,
-    active: agents.length,
+    inside: 0,
     evacuated: 0,
+    casualties: 0,
     totalAgents: agents.length,
     trips: 0,
     doorCollisions: 0,
@@ -190,10 +214,12 @@ function makeFallbackState(mode = els.mode.value || "current") {
 function visualCenter(x, y) {
   if (state && state.mode === "modified") {
     let cx;
-    if (x >= 0 && x <= 2) {
-      cx = 68 + x * 34;
-    } else if (x >= 5 && x <= 7) {
-      cx = 222 + (x - 5) * 34;
+    if (MODIFIED_WORKSTATION_X.has(x)) {
+      cx = MODIFIED_WORKSTATION_X.get(x);
+    } else if (x === 3) {
+      cx = MODIFIED_LEFT_AISLE_X;
+    } else if (x === 4) {
+      cx = MODIFIED_CENTER_AISLE_X;
     } else if (x === 8) {
       cx = EXIT_X;
     } else if (x >= 9) {
@@ -340,10 +366,10 @@ function centerForAgentPosition(agent, x, y) {
   const center = visualCenter(x, y);
   const movingThroughModifiedAisle =
     state?.mode === "modified" &&
-    x === 4 &&
+    (x === 3 || x === 4) &&
     [1, 2, 4, 5, 7].includes(y) &&
     !["waiting", "retrieving_locker", "peer_wait"].includes(agent.phase);
-  return movingThroughModifiedAisle ? { x: 184, y: center.y } : center;
+  return movingThroughModifiedAisle ? { x: center.x, y: center.y } : center;
 }
 
 function interpolatedMotionPoint(agent, motion, now = performance.now()) {
@@ -374,6 +400,11 @@ function interpolatedMotionPoint(agent, motion, now = performance.now()) {
 function syncAgentMotion(agents = state?.agents || []) {
   const now = performance.now();
   const activeIds = new Set();
+
+  if (agentMotionMode !== state?.mode) {
+    agentMotion.clear();
+    agentMotionMode = state?.mode;
+  }
 
   agents.filter((agent) => !agent.exited).forEach((agent) => {
     activeIds.add(agent.id);
@@ -1285,24 +1316,12 @@ function drawWorkstationBenches(ctx, layout) {
 
   if (state && state.mode === "modified") {
     layout.workstationRows.forEach((row) => {
-      const y = visualCenter(0, row).y;
       const rowCells = layout.workstations.filter(([, cellY]) => cellY === row);
-      const hasLeftTable = rowCells.some(([x]) => x >= 0 && x <= 2);
-      const hasRightTable = rowCells.some(([x]) => x >= 5 && x <= 7);
+      const leftCells = rowCells.filter(([x]) => x >= 0 && x <= 3);
+      const rightCells = rowCells.filter(([x]) => x >= 5 && x <= 7);
 
-      if (hasLeftTable) {
-        ctx.beginPath();
-        ctx.moveTo(68 - 20, y);
-        ctx.lineTo(136 + 20, y);
-        ctx.stroke();
-      }
-
-      if (hasRightTable) {
-        ctx.beginPath();
-        ctx.moveTo(222 - 20, y);
-        ctx.lineTo(290 + 20, y);
-        ctx.stroke();
-      }
+      drawWorkstationRowSpan(ctx, leftCells, row, 20);
+      drawWorkstationRowSpan(ctx, rightCells, row, 18);
     });
   } else {
     layout.workstationRows.forEach((row) => {
@@ -1597,26 +1616,15 @@ function drawMap() {
     ctx.strokeStyle = "rgba(56, 189, 248, 0.1)";
     ctx.lineWidth = 1;
     for (const row of layout.workstationRows) {
-      const y = visualCenter(0, row).y;
       if (state && state.mode === "modified") {
         const rowCells = layout.workstations.filter(([, cellY]) => cellY === row);
-        const hasLeftTable = rowCells.some(([x]) => x >= 0 && x <= 3);
-        const hasRightTable = rowCells.some(([x]) => x >= 5 && x <= 7);
+        const leftCells = rowCells.filter(([x]) => x >= 0 && x <= 3);
+        const rightCells = rowCells.filter(([x]) => x >= 5 && x <= 7);
 
-        if (hasLeftTable) {
-          ctx.beginPath();
-          ctx.moveTo(50, y);
-          ctx.lineTo(182, y);
-          ctx.stroke();
-        }
-
-        if (hasRightTable) {
-          ctx.beginPath();
-          ctx.moveTo(244, y);
-          ctx.lineTo(342, y);
-          ctx.stroke();
-        }
+        drawWorkstationRowSpan(ctx, leftCells, row, 30);
+        drawWorkstationRowSpan(ctx, rightCells, row, 26);
       } else {
+        const y = visualCenter(0, row).y;
         ctx.beginPath();
         ctx.moveTo(LAB_LEFT + 8, y);
         ctx.lineTo(WORKSTATION_X.get(2) + 26, y);
@@ -1917,8 +1925,9 @@ function drawAgent(ctx, agent) {
 
 function drawMetrics() {
   $("mTime").textContent = `${state.time}s`;
-  $("mInside").textContent = state.active;
+  $("mInside").textContent = state.inside;
   $("mEvacuated").textContent = state.evacuated;
+  $("mCasualties").textContent = state.casualties;
   $("mTrips").textContent = state.trips;
   $("mDoors").textContent = state.doorCollisions;
   $("mHeat").textContent = state.maxHeat;
@@ -2161,6 +2170,20 @@ function comparisonAnalysis(data) {
   </div>`;
 }
 
+function comparisonLoading(replications) {
+  const runLabel = replications === 1 ? "1 replication" : `${replications} replications`;
+  return `<div class="comparison-loading" role="status" aria-live="polite">
+    <div class="loading-orbit" aria-hidden="true"></div>
+    <div>
+      <strong>Running comparison</strong>
+      <span>Processing current and modified layouts across ${runLabel}.</span>
+    </div>
+    <div class="loading-bars" aria-hidden="true">
+      <i></i><i></i><i></i><i></i>
+    </div>
+  </div>`;
+}
+
 async function stepOnce() {
   if (stepBusy) return;
   stepBusy = true;
@@ -2194,10 +2217,18 @@ els.heat.onclick = () => {
 };
 els.compare.onclick = async () => {
   const originalHtml = els.compare.innerHTML;
+  const replications = Math.max(1, parseInt(els.replications.value, 10) || 1);
   els.compare.disabled = true;
-  els.compare.innerHTML = `<span>Comparing...</span>`;
+  els.compare.classList.add("is-loading");
+  els.compare.setAttribute("aria-busy", "true");
+  els.compare.innerHTML = `<span class="button-spinner" aria-hidden="true"></span><span>Comparing</span>`;
+  els.comparison.innerHTML = comparisonLoading(replications);
   try {
-    const res = await fetch("/api/compare", { method: "POST" });
+    const res = await fetch("/api/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ replications })
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     els.comparison.innerHTML = `<table>
@@ -2217,6 +2248,8 @@ els.compare.onclick = async () => {
     els.comparison.innerHTML = `<div class="analysis-note">Comparison could not be completed. Reset the scenario and try again.</div>`;
   } finally {
     els.compare.disabled = false;
+    els.compare.classList.remove("is-loading");
+    els.compare.removeAttribute("aria-busy");
     els.compare.innerHTML = originalHtml;
   }
 };

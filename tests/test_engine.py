@@ -70,6 +70,32 @@ class SimulationValidationTests(unittest.TestCase):
         self.assertGreater(summary["exit_utilization_percent"], 0)
         self.assertLessEqual(summary["exit_utilization_percent"], 100)
 
+    def test_random_seed_controls_replication_variability(self):
+        first = Simulation("current", panic=True, fire_origin="data", random_seed=1)
+        repeat = Simulation("current", panic=True, fire_origin="data", random_seed=1)
+        different = Simulation("current", panic=True, fire_origin="data", random_seed=2)
+
+        def roster(sim):
+            return [
+                (agent.behavior, agent.wait_until, agent.panic_prone, round(agent.mobility_factor, 4))
+                for agent in sim.agents
+            ]
+
+        self.assertEqual(roster(first), roster(repeat))
+        self.assertNotEqual(roster(first), roster(different))
+
+    def test_completed_replications_can_produce_different_results(self):
+        seed_one = self.run_to_completion("current", panic=True, fire_origin="data")
+        seed_two = Simulation("current", panic=True, fire_origin="data", random_seed=2)
+        while not seed_two.completed:
+            seed_two.step()
+
+        metrics = ("trips", "door_collisions", "max_heat", "fire_damage", "average_wait_time")
+        self.assertNotEqual(
+            {key: seed_one.summary()[key] for key in metrics},
+            {key: seed_two.summary()[key] for key in metrics},
+        )
+
     def test_modified_layout_causes_casualties_for_front_fires(self):
         for panic in (True, False):
             for fire_origin in ("desk", "tv"):
@@ -295,6 +321,32 @@ class SimulationValidationTests(unittest.TestCase):
                     any(cell in sim.table_cells and cell not in own_table for cell in path),
                     msg=f"{seat} route crosses unrelated workstation/computer cells: {path}",
                 )
+
+    def test_modified_center_aisle_supports_two_parallel_lines(self):
+        sim = Simulation("modified", panic=False, fire_origin="data")
+        self.assertEqual(sim.center_aisle_cols(), (3, 4))
+
+        for seat, expected_col in [
+            ((0, 1), 3),
+            ((1, 1), 4),
+            ((2, 1), 3),
+            ((5, 1), 4),
+            ((6, 1), 3),
+            ((7, 1), 4),
+        ]:
+            with self.subTest(seat=seat):
+                agent = next(item for item in sim.agents if (item.x, item.y) == seat)
+                agent.wait_until = 0
+                target = sim.target_for(agent, sim.density_map())
+                self.assertEqual(target[0], expected_col)
+
+        for agent in sim.agents:
+            agent.exited = True
+        sim.agents[0].exited = False
+        sim.agents[0].x, sim.agents[0].y = 3, 4
+        sim.agents[1].exited = False
+        sim.agents[1].x, sim.agents[1].y = 4, 4
+        self.assertEqual(sim.queue_length(), 2)
 
     def test_student_paths_do_not_jump_vertically_through_workstation_tables(self):
         for mode in ("current", "modified"):

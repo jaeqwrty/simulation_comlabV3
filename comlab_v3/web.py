@@ -6,8 +6,9 @@ import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
-import threading
 import time
+from threading import RLock
+from typing import Any
 from urllib.parse import urlparse
 import webbrowser
 
@@ -52,50 +53,53 @@ STATIC_DIR = Path(__file__).with_name("static")
 
 
 class SimulationService:
-    """Thread-safe wrapper around the simulation engine."""
+    """Request-driven simulation state, matching the Vercel deployment."""
 
     def __init__(self):
-        self.lock = threading.RLock()
+        self.lock = RLock()
         self.mode = "current"
         self.panic = True
         self.fire_origin = "data"
         self.speed = 1.5
         self.running = False
+        self.last_tick = time.monotonic()
         self.sim = Simulation(self.mode, self.panic, self.fire_origin)
-        self.worker = threading.Thread(target=self._loop, daemon=True)
-        self.worker.start()
 
-    def _loop(self):
-        while True:
-            with self.lock:
-                should_step = self.running and not self.sim.completed
-                speed = self.speed
-            if should_step:
-                with self.lock:
-                    self.sim.step()
-                time.sleep(max(0.035, 0.34 / speed))
-            else:
-                time.sleep(0.08)
-
-    def apply_config(self, config: dict | None):
+    def apply_config(self, config: dict[str, Any] | None):
         if not config:
             return
         self.mode = config.get("mode", self.mode)
         self.panic = bool(config.get("panic", self.panic))
         self.fire_origin = config.get("fireOrigin", self.fire_origin)
         self.speed = float(config.get("speed", self.speed))
-        
-        if hasattr(self, "sim") and self.sim:
-            self.sim.panic = self.panic
+        self.sim.panic = self.panic
 
-    def reset(self, config: dict | None = None):
+    def tick(self):
+        if not self.running or self.sim.completed:
+            self.last_tick = time.monotonic()
+            return
+
+        now = time.monotonic()
+        interval = max(0.035, 0.34 / max(0.1, self.speed))
+        steps = min(12, int((now - self.last_tick) / interval))
+        if steps <= 0:
+            return
+
+        for _ in range(steps):
+            if self.sim.completed:
+                break
+            self.sim.step()
+        self.last_tick = now
+
+    def reset(self, config: dict[str, Any] | None = None):
         with self.lock:
             self.apply_config(config)
             self.running = False
+            self.last_tick = time.monotonic()
             self.sim = Simulation(self.mode, self.panic, self.fire_origin)
             return self.state()
 
-    def control(self, action: str, config: dict | None = None):
+    def control(self, action: str, config: dict[str, Any] | None = None):
         with self.lock:
             self.apply_config(config)
             if action == "start":
@@ -108,38 +112,42 @@ class SimulationService:
             elif action == "reset":
                 self.running = False
                 self.sim = Simulation(self.mode, self.panic, self.fire_origin)
+            self.last_tick = time.monotonic()
             return self.state()
 
-    def compare(self):
+    def compare(self, config: dict[str, Any] | None = None):
         with self.lock:
             panic = self.panic
             fire_origin = self.fire_origin
 
+        replications = 1
+        if config and "replications" in config:
+            try:
+                replications = max(1, int(config["replications"]))
+            except (TypeError, ValueError):
+                pass
+
         result = {}
         for mode in ("current", "modified"):
-            sim = Simulation(mode, panic, fire_origin)
-            while not sim.completed:
-                sim.step()
-            result[mode] = sim.summary()
+            summaries = []
+            for replication in range(replications):
+                sim = Simulation(mode, panic, fire_origin, random_seed=replication)
+                while not sim.completed:
+                    sim.step()
+                summaries.append(sim.summary())
+
+            avg_summary = {}
+            for key in summaries[0]:
+                if type(summaries[0][key]) in (int, float):
+                    avg_summary[key] = sum(s[key] for s in summaries) / replications
+                else:
+                    avg_summary[key] = summaries[0][key]
+            result[mode] = avg_summary
         return result
 
     def state(self):
+        self.tick()
         sim = self.sim
-        agents = [
-            {
-                "id": agent.agent_id,
-                "kind": agent.kind,
-                "behavior": agent.behavior,
-                "role": role_for_agent(agent),
-                "x": agent.x,
-                "y": agent.y,
-                "target": agent.target,
-                "phase": agent.phase,
-                "exited": agent.exited,
-                "stamped_until": agent.stamped_until,
-            }
-            for agent in sim.agents
-        ]
         active = sum(1 for agent in sim.agents if not agent.exited)
         summary = sim.summary()
         return {
@@ -165,7 +173,21 @@ class SimulationService:
             "exitUtilizationPercent": summary["exit_utilization_percent"],
             "processingTime": summary["processing_time"],
             "completed": sim.completed,
-            "agents": agents,
+            "agents": [
+                {
+                    "id": agent.agent_id,
+                    "kind": agent.kind,
+                    "behavior": agent.behavior,
+                    "role": role_for_agent(agent),
+                    "x": agent.x,
+                    "y": agent.y,
+                    "target": agent.target,
+                    "phase": agent.phase,
+                    "exited": agent.exited,
+                    "stamped_until": agent.stamped_until,
+                }
+                for agent in sim.agents
+            ],
             "heatmap": sim.heatmap,
             "rate": sim.rate[-120:],
             "events": sim.events[:40],
@@ -190,8 +212,8 @@ def layout_payload(mode: str, fire_origin: str):
         "storage": sim.storage,
         "frontExit": FRONT_EXIT,
         "backExit": BACK_EXIT,
-        "frontStairs": FRONT_STAIRS,
-        "emergencyStairs": EMERGENCY_STAIRS,
+        "frontStairs": None,
+        "emergencyStairs": None,
         "currentLocker": CURRENT_LOCKER,
         "modifiedLocker": MODIFIED_LOCKER,
         "locker": sim.locker,
@@ -240,17 +262,18 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
+        request_path = urlparse(self.path).path
         length = int(self.headers.get("Content-Length", "0"))
         payload = {}
         if length:
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
 
-        if self.path == "/api/control":
+        if request_path == "/api/control":
             self.send_json(SERVICE.control(payload.get("action", "pause"), payload.get("config")))
-        elif self.path == "/api/reset":
+        elif request_path == "/api/reset":
             self.send_json(SERVICE.reset(payload))
-        elif self.path == "/api/compare":
-            self.send_json(SERVICE.compare())
+        elif request_path == "/api/compare":
+            self.send_json(SERVICE.compare(payload))
         else:
             self.send_error(404)
 

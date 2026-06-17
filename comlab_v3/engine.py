@@ -376,11 +376,12 @@ def find_path(
 class Simulation:
     """Stateful ABM simulation for one layout/scenario run."""
 
-    def __init__(self, mode: str = "current", panic: bool = True, fire_origin: str = "data"):
+    def __init__(self, mode: str = "current", panic: bool = True, fire_origin: str = "data", random_seed: int = 0):
         self.mode = mode
         self.panic = panic
         self.fire_origin_name = fire_origin
         self.fire_origin = fire_origin_for(fire_origin, mode)
+        self.random_seed = int(random_seed)
         
         # Configure layout properties dynamically based on mode
         if mode == "modified":
@@ -469,6 +470,12 @@ class Simulation:
         )
         self.agents = self.make_agents()
 
+    def stochastic_seed(self, seed: int) -> int:
+        return seed + self.random_seed * 100_003
+
+    def seeded_random(self, seed: int) -> float:
+        return seeded_random(self.stochastic_seed(seed))
+
     def fire_fuel_weight(self, pos: tuple[int, int]) -> float:
         if pos in self.data_racks:
             return 2.4
@@ -525,7 +532,7 @@ class Simulation:
                     chance += 0.006
 
                 roll_seed = self.time * 1009 + candidate[0] * 37 + candidate[1] * 101 + len(self.active_fire_cells)
-                if seeded_random(roll_seed) < min(0.34, chance):
+                if self.seeded_random(roll_seed) < min(0.34, chance):
                     new_cells.add(candidate)
 
         if new_cells:
@@ -623,25 +630,25 @@ class Simulation:
             locker_rate = 0.50 if self.panic else 0.34
 
         for index, seat in enumerate(self.workstations):
-            roll = seeded_random(index + 10)
+            roll = self.seeded_random(index + 10)
             behavior = "immediate" if roll < 0.25 else "task" if roll < 0.55 else "peer" if roll < 0.78 else "locker"
-            if seeded_random(index + 99) < locker_rate:
+            if self.seeded_random(index + 99) < locker_rate:
                 behavior = "locker"
 
             # ── Pack-up delay: every student spends time closing apps / grabbing
             #    a phone before they stand up.  "immediate" is fastest (2-4 steps),
             #    "task" and "peer" are slower (4-9 steps), "locker" is slowest (6-12).
             if behavior == "immediate":
-                pack_delay = 2 + int(seeded_random(index + 11) * 3)   # 2-4
+                pack_delay = 2 + int(self.seeded_random(index + 11) * 3)   # 2-4
             elif behavior in ("task", "peer"):
-                pack_delay = 4 + int(seeded_random(index + 21) * 6)   # 4-9
+                pack_delay = 4 + int(self.seeded_random(index + 21) * 6)   # 4-9
             else:  # locker
-                pack_delay = 6 + int(seeded_random(index + 31) * 7)   # 6-12
+                pack_delay = 6 + int(self.seeded_random(index + 31) * 7)   # 6-12
 
-            panic_prone = seeded_random(index + 201) < 0.28
-            mobility_factor = 0.78 + seeded_random(index + 301) * 0.32
+            panic_prone = self.seeded_random(index + 201) < 0.28
+            mobility_factor = 0.78 + self.seeded_random(index + 301) * 0.32
             if self.panic and panic_prone:
-                pack_delay += 1 + int(seeded_random(index + 401) * 3)
+                pack_delay += 1 + int(self.seeded_random(index + 401) * 3)
                 mobility_factor *= 0.85
 
             agents.append(
@@ -651,7 +658,7 @@ class Simulation:
                     behavior=behavior,
                     x=seat[0],
                     y=seat[1],
-                    seed=index + 1,
+                    seed=self.stochastic_seed(index + 1),
                     wait_until=pack_delay,
                     target=seat,
                     assigned_exit=None,
@@ -662,20 +669,20 @@ class Simulation:
 
         def make_staff(aid: str, kind: str, x: int, y: int, seed: int, exit_assign: str | None = None) -> Agent:
             if kind == "instructor":
-                delay = 3 + int(seeded_random(seed) * 5)
+                delay = 3 + int(self.seeded_random(seed) * 5)
             elif kind == "assistant":
-                delay = 2 + int(seeded_random(seed) * 4)
+                delay = 2 + int(self.seeded_random(seed) * 4)
             else: # custodian
-                delay = 1 + int(seeded_random(seed) * 3)
+                delay = 1 + int(self.seeded_random(seed) * 3)
             
-            panic_prone = seeded_random(seed + 201) < 0.20
-            mobility_factor = 0.80 + seeded_random(seed + 301) * 0.30
+            panic_prone = self.seeded_random(seed + 201) < 0.20
+            mobility_factor = 0.80 + self.seeded_random(seed + 301) * 0.30
             
             if self.panic and panic_prone:
-                delay += 1 + int(seeded_random(seed + 401) * 3)
+                delay += 1 + int(self.seeded_random(seed + 401) * 3)
                 mobility_factor *= 0.85
 
-            return Agent(aid, kind, kind, x, y, seed, wait_until=delay, target=(x, y), phase="waiting", assigned_exit=exit_assign, panic_prone=panic_prone, mobility_factor=mobility_factor)
+            return Agent(aid, kind, kind, x, y, self.stochastic_seed(seed), wait_until=delay, target=(x, y), phase="waiting", assigned_exit=exit_assign, panic_prone=panic_prone, mobility_factor=mobility_factor)
 
         if self.mode == "modified":
             agents.extend(
@@ -712,14 +719,33 @@ class Simulation:
         return density
 
     def queue_length(self) -> int:
-        aisle_col = 4 if self.mode == "modified" else 3
-        queue_cells = {(aisle_col, y) for y in range(ROWS)}
+        queue_cells = {
+            (aisle_col, y)
+            for aisle_col in self.center_aisle_cols()
+            for y in range(ROWS)
+        }
         queue_cells.update({FRONT_EXIT, BACK_EXIT, (7, 0), (7, 1), (7, 10), (7, 11)})
         return sum(
             1
             for agent in self.agents
             if not agent.exited and (agent.x, agent.y) in queue_cells
         )
+
+    def center_aisle_cols(self) -> tuple[int, ...]:
+        return (3, 4) if self.mode == "modified" else (3,)
+
+    def center_aisle_col_for(self, agent: Agent, target_cell: tuple[int, int] | None = None) -> int:
+        if self.mode != "modified":
+            return 3
+        if agent.kind == "student":
+            digits = "".join(char for char in agent.agent_id if char.isdigit())
+            if digits:
+                return 3 if (int(digits) - 1) % 2 == 0 else 4
+        if target_cell and target_cell[0] in {3, 4}:
+            return target_cell[0]
+        if agent.x in {3, 4}:
+            return agent.x
+        return 3 if agent.x <= 3 else 4
 
     def choose_exit(self, agent: Agent, density: dict[tuple[int, int], int]) -> tuple[int, int]:
         if agent.behavior == "locker" and agent.visited_locker:
@@ -733,7 +759,7 @@ class Simulation:
         elif agent.assigned_exit == "back":
             preferred = BACK_EXIT
         else:
-            if self.panic and seeded_random(agent.seed + len(density)) < 0.18:
+            if self.panic and self.seeded_random(agent.seed + len(density)) < 0.18:
                 preferred = FRONT_EXIT if density.get(FRONT_EXIT, 0) <= density.get(BACK_EXIT, 0) else BACK_EXIT
             else:
                 preferred = FRONT_EXIT if manhattan((agent.x, agent.y), FRONT_EXIT) <= manhattan((agent.x, agent.y), BACK_EXIT) else BACK_EXIT
@@ -791,7 +817,7 @@ class Simulation:
                         agent.phase = "evacuating"
                     target_cell = self.choose_exit(agent, density)
             elif agent.behavior == "peer" and agent.phase == "waiting":
-                peer_col = 4 if self.mode == "modified" else 3
+                peer_col = self.center_aisle_col_for(agent)
                 return (peer_col, agent.y)
             else:
                 target_cell = self.choose_exit(agent, density)
@@ -838,7 +864,7 @@ class Simulation:
             return agent.target
 
         if should_route_via_center_aisle(agent, target_cell, self.mode):
-            aisle_col = 4 if self.mode == "modified" else 3
+            aisle_col = self.center_aisle_col_for(agent, target_cell)
             rear_waypoint_row = 9 if self.mode == "modified" else 10
             if target_cell[1] == 0 and agent.y == 0:
                 return target_cell
@@ -851,6 +877,7 @@ class Simulation:
                     return (aisle_col, 0 if target_row >= rear_waypoint_row else rear_waypoint_row)
                 return waypoint
             else:
+                aisle_col = agent.x
                 if target_cell[1] == 0:
                     if agent.y == 0:
                         return target_cell
@@ -870,7 +897,7 @@ class Simulation:
         speed = 0.72 if agent.kind == "student" else 1.10
         crowded = density.get((agent.x, agent.y), 1)
 
-        aisle_col = 4 if self.mode == "modified" else 3
+        aisle_cols = self.center_aisle_cols()
         non_squeeze_cols = {3, 4, 7} if self.mode == "modified" else {3, 7}
 
         # Row-workstation squeeze: narrow gap between rows slows movement
@@ -878,7 +905,7 @@ class Simulation:
             speed *= 0.45   # tight row gaps
 
         # Centre-aisle is the bottleneck corridor
-        if agent.x == aisle_col:
+        if agent.x in aisle_cols:
             if crowded >= 2:
                 speed *= 0.60  # single-file shuffling
             if crowded >= 4:
@@ -1068,7 +1095,7 @@ class Simulation:
                     faint_smoke_chance *= max(0.25, 1 - self.suppression_level * 0.35)
                 if assistant_near_current:
                     faint_smoke_chance *= 0.25
-                if seeded_random(self.time * agent.seed + 555) < faint_smoke_chance:
+                if self.seeded_random(self.time * agent.seed + 555) < faint_smoke_chance:
                     # Faint from smoke — longer recovery, agents nearby must step around
                     duration = 5 if self.mode == "modified" else 9
                     if assistant_near_current:
@@ -1100,7 +1127,7 @@ class Simulation:
             hesitation_chance = 0.040
             if agent.kind == "student" and agent.panic_prone:
                 hesitation_chance = 0.10
-            if self.panic and agent.kind == "student" and seeded_random(self.time + agent.seed) < hesitation_chance:
+            if self.panic and agent.kind == "student" and self.seeded_random(self.time + agent.seed) < hesitation_chance:
                 agent.phase = "panic_freeze" if agent.panic_prone else "hesitating"
                 continue
             if agent.speed_bank < 1:
@@ -1123,11 +1150,11 @@ class Simulation:
             # ── Stampede check ─────────────────────────────────────────────────
             # In the centre aisle high crowd density can trigger a stampede
             # surge: agents at the back get knocked and pinned for several steps.
-            aisle_col = 4 if self.mode == "modified" else 3
-            if agent.kind == "student" and agent.x == aisle_col and local_density >= 5 and self.panic:
-                stamp_roll = seeded_random(self.time * agent.seed + 991)
+            aisle_cols = self.center_aisle_cols()
+            if agent.kind == "student" and agent.x in aisle_cols and local_density >= 5 and self.panic:
+                stamp_roll = self.seeded_random(self.time * agent.seed + 991)
                 if stamp_roll < 0.18:
-                    pin_duration = 3 + int(seeded_random(self.time + agent.seed + 3) * 4)  # 3-6 steps
+                    pin_duration = 3 + int(self.seeded_random(self.time + agent.seed + 3) * 4)  # 3-6 steps
                     agent.stamped_until = self.time + pin_duration
                     agent.phase = "tripped"  # visually show as tripped/knocked down
                     self.add_event("trip", f"{agent.agent_id} knocked down in centre-aisle stampede")
@@ -1154,9 +1181,9 @@ class Simulation:
             if assistant_near_next:
                 trip_chance *= 0.35
 
-            if agent.kind == "student" and seeded_random(self.time * agent.seed + self.trips) < trip_chance:
+            if agent.kind == "student" and self.seeded_random(self.time * agent.seed + self.trips) < trip_chance:
                 self.trips += 1
-                faint_roll = seeded_random(self.time * agent.seed + self.trips + 77)
+                faint_roll = self.seeded_random(self.time * agent.seed + self.trips + 77)
                 is_faint = self.panic and faint_roll < 0.22   # higher faint chance
                 
                 if is_faint:
@@ -1223,15 +1250,15 @@ class Simulation:
             if self.mode == "modified":
                 agent.assigned_exit = "back"
             # Locker retrieval: rummaging through a bag/locker takes significant time
-            locker_delay = 10 + int(seeded_random(agent.seed + 77) * 6)  # 10-15 steps
+            locker_delay = 10 + int(self.seeded_random(agent.seed + 77) * 6)  # 10-15 steps
             agent.wait_until = self.time + locker_delay
             agent.phase = "retrieving_locker"
             self.add_event("locker", f"{agent.agent_id} retrieved belongings from locker")
             return
-        aisle_col = 4 if self.mode == "modified" else 3
-        if agent.behavior == "peer" and agent.phase == "waiting" and pos == (aisle_col, agent.y):
+        peer_col = self.center_aisle_col_for(agent)
+        if agent.behavior == "peer" and agent.phase == "waiting" and pos == (peer_col, agent.y):
             # Peer waits for a friend — realistic social delay
-            peer_delay = 3 + int(seeded_random(agent.seed + 44) * 4)  # 3-6 steps
+            peer_delay = 3 + int(self.seeded_random(agent.seed + 44) * 4)  # 3-6 steps
             agent.wait_until = self.time + peer_delay
             agent.phase = "peer_wait"
             return
@@ -1276,10 +1303,10 @@ class Simulation:
             # Current layout has single-width corridor exits — very congested
             pressure = 0.40 + (0.18 if self.panic else 0.0) + (0.08 if door == "front" else 0.03)
 
-        if seeded_random(self.time + agent.seed + self.door_collisions) < pressure:
+        if self.seeded_random(self.time + agent.seed + self.door_collisions) < pressure:
             self.door_collisions += 1
             # Longer door jam: 3-5 steps of blocked exit
-            jam_duration = 3 + int(seeded_random(self.time + self.door_collisions) * 3)
+            jam_duration = 3 + int(self.seeded_random(self.time + self.door_collisions) * 3)
             self.door_cooldown[door] = self.time + jam_duration
             self.add_event("door", f"{door.title()} door jam — {jam_duration} step blockage")
             return
